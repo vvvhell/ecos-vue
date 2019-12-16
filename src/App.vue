@@ -12,15 +12,15 @@
       <div class="card">
         <el-card>
           <div style="font-size:20px">用户登录</div>
-          <el-form :model="ruleForm" status-icon :rules="rules" ref="ruleForm" class="login">
+          <el-form :model="loginForm" status-icon :rules="rules" ref="loginForm" class="login">
             <el-form-item label="用户名" prop="username">
-              <el-input type="text" v-model="ruleForm.username"></el-input>
+              <el-input type="text" v-model="loginForm.username"></el-input>
             </el-form-item>
             <el-form-item label="密码" prop="pass">
-              <el-input type="password" v-model="ruleForm.pass" autocomplete="off"></el-input>
+              <el-input type="password" v-model="loginForm.pass" autocomplete="off"></el-input>
             </el-form-item>
             <br />
-            <el-checkbox style="padding-left:0px" v-model="checked">
+            <el-checkbox style="padding-left:0px" v-model="agreed1">
               我已阅读并同意
               <el-link type="primary">《拟态对象存储服务协议》</el-link>
             </el-checkbox>
@@ -48,25 +48,25 @@
           <el-step title="填写注册信息" icon="el-icon-edit"></el-step>
           <el-step title="身份信息采集" icon="el-icon-upload"></el-step>
         </el-steps>
-        <el-form :model="ruleForm" status-icon :rules="rules" ref="ruleForm" class="demo-ruleForm">
+        <el-form :model="regForm" status-icon :rules="rules" ref="regForm" class="regForm">
           <el-form-item label="用户名" prop="username">
-            <el-input type="text" v-model="ruleForm.username"></el-input>
+            <el-input type="text" v-model="regForm.username"></el-input>
           </el-form-item>
           <p />
           <el-form-item label="密码" prop="pass">
-            <el-input type="password" v-model="ruleForm.pass" autocomplete="off"></el-input>
+            <el-input type="password" v-model="regForm.pass" autocomplete="off"></el-input>
           </el-form-item>
           <p />
           <el-form-item label="确认密码" prop="checkPass">
-            <el-input type="password" v-model="ruleForm.checkPass" autocomplete="off"></el-input>
+            <el-input type="password" v-model="regForm.checkPass" autocomplete="off"></el-input>
           </el-form-item>
           <p />
           <el-form-item label="邮箱" prop="email">
-            <el-input type="text" v-model="ruleForm.email" autocomplete="off"></el-input>
+            <el-input type="text" v-model="regForm.email" autocomplete="off"></el-input>
           </el-form-item>
           <p />
         </el-form>
-        <el-checkbox v-model="checked">
+        <el-checkbox v-model="agreed2">
           我已阅读并同意
           <el-link type="primary">《拟态对象存储服务协议》</el-link>
         </el-checkbox>
@@ -116,6 +116,11 @@
 </template>
 
 <script>
+
+import Socket from './api/socket'
+import './api/login'
+import { getAesKey, encrypt, decrypt, aesEncrypt, aesDecrypt } from './api/login';
+
 export default {
   data() {
     var isUsernameChecked = false;
@@ -146,8 +151,8 @@ export default {
         this.isPassChecked = false;
         callback(new Error("密码长度必须为6位-15位"));
       } else {
-        if (this.ruleForm.checkPass !== "") {
-          this.$refs.ruleForm.validateField("checkPass");
+        if (this.regForm.checkPass !== "") {
+          this.$refs.regForm.validateField("checkPass");
         }
         this.isPassChecked = true;
         callback();
@@ -158,7 +163,7 @@ export default {
       if (value === "") {
         this.isPassChecked2 = false;
         callback(new Error("请再次输入密码"));
-      } else if (value !== this.ruleForm.pass) {
+      } else if (value !== this.regForm.pass) {
         this.isPassChecked2 = false;
         callback(new Error("两次输入密码不一致!"));
       } else {
@@ -186,27 +191,50 @@ export default {
         }
       }, 500);
     };
-    var qrcontent = "123";
+    var qrcontent = "123"; //二维码内容
 
     return {
-      ruleForm: {
+      regForm: {
+        type:1,
         username: "",
         pass: "",
         checkPass: "",
         email: ""
       },
+      loginForm: {
+        type:2,
+        username: "",
+        pass: ""
+      },
+      loginReq:{
+        type: 202,
+        username: "",
+      },
+      regReq:{
+        type: 202,
+        username:"",
+      },
+
+      
       rules: {
         username: [{ validator: checkUsername, trigger: "blur" }],
         pass: [{ validator: validatePass, trigger: "blur" }],
         checkPass: [{ validator: validatePass2, trigger: "blur" }],
         email: [{ validator: checkEmail, trigger: "blur" }]
       },
-      info: null,
+      info: {
+        type:null,
+        username:'',
+      },
+      cmKey:'',
+      rsaKey:'',
       loginFormVisible: false,
       registerFormVisible: false,
       registerForm2Visible: false,
-      checked: false,
+      agreed1: false,
+      agreed2: false,
       painting: {
+        //二维码参数
         width: 250,
         height: 250,
         views: [
@@ -222,27 +250,19 @@ export default {
       }
     };
   },
-  mounted() {
-    this.$axios.get('https://www.runoob.com/try/ajax/json_demo.json')
-    .then(response => (this.info = response.data.name))
-    .catch(function(error) {
-        // 请求失败处理
-        console.log(error);
-      });
-  },
+  // mounted() {
+  //    this.$axios.post('',this.msg)
+  //    .then(response => (this.info = response))
+  //    .catch(function(error) {
+  //        // 请求失败处理
+  //        console.log(error);
+
+  //      });
+  //  },
   methods: {
-    // submitForm(formName) {
-    //   this.$refs[formName].validate((valid) => {
-    //     if (valid) {
-    //       alert('submit!');
-    //     } else {
-    //       console.log('error submit!!');
-    //       return false;
-    //     }
-    //   });
-    // },
+
     handleLogin() {
-      if (this.isUsernameChecked && this.isPassChecked && this.checked) {
+      if (this.isUsernameChecked && this.isPassChecked && this.agreed1) {
         this.$notify({
           title: "温馨提示",
           message: "请扫码验证身份信息！",
@@ -250,6 +270,24 @@ export default {
           offset: 50,
           type: "success"
         });
+        this.$data.loginReq.username = this.$data.loginForm.username;
+        //let socket = new Socket();
+        //socket.write(JSON.stringify(this.$data.loginReq));
+        //let response = await socket.read();
+        //cmKey = JSON.parse(response);
+        //console.log(cmKey);
+        //async function a(loginReq){
+        //  await socket.read();
+        //};
+       //getAesKey(this.$data.loginReq)
+
+
+
+
+
+
+
+
         setTimeout(() => {
           this.loginFormVisible = true;
         }, 1000);
@@ -261,6 +299,14 @@ export default {
           offset: 50,
           type: "warning"
         });
+        var text = JSON.stringify(this.$data.loginForm);
+        var a= aesEncrypt(text , '1234567890123456');
+        console.log(a);
+        var b= aesDecrypt(a , '1234567890123456');
+        console.log(b);
+        this.$data.info = JSON.parse(b);
+        var c = this.$data.info.username;
+        console.log(c);
       }
     },
     handleCompleteLogin() {
@@ -272,11 +318,16 @@ export default {
         this.isPassChecked &&
         this.isPassChecked2 &&
         this.isEmailChecked &&
-        this.checked
+        this.agreed2
       ) {
+        this.$data.regReq.username = this.$data.regForm.username;
+
+
+
+
         this.$notify({
           title: "温馨提示",
-          message: "注册成功，请扫码采集身份信息！",
+          message: "提交成功，请扫码采集身份信息！",
           duration: 5000,
           offset: 50,
           type: "success"
