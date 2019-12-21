@@ -1,13 +1,13 @@
 <template>
   <div id="app">
     <div class="title">
-      <span>拟态对象存储 | ECOS</span>
+      <span>ECOS | 拟态对象存储</span>
     </div>
-    <el-divider>{{info}}</el-divider>
+    <el-divider ></el-divider>
 
     <el-main id="body">
       <div class="background">
-        <img src="./assets/background.jpg" style="height: 81vh" />
+        <img src="../assets/background.jpg" style="height: 81vh" />
       </div>
       <div class="card">
         <el-card>
@@ -38,7 +38,7 @@
 
     <div id="footer">
       <el-container>
-        <el-footer>北京大学深圳研究生院</el-footer>
+        <el-footer>北京大学•深圳研究生院</el-footer>
       </el-container>
     </div>
 
@@ -117,9 +117,9 @@
 
 <script>
 
-import Socket from './api/socket'
-import './api/login'
-import { getAesKey, encrypt, decrypt, aesEncrypt, aesDecrypt } from './api/login';
+//import Socket from './api/socket'
+import '../api/login'
+import { getAesKey, encrypt, decrypt, aesEncrypt, aesDecrypt, rsaEncrypt, rsaDecrypt } from '../api/login';
 
 export default {
   data() {
@@ -193,6 +193,7 @@ export default {
     };
     var qrcontent = "123"; //二维码内容
 
+
     return {
       regForm: {
         type:1,
@@ -206,15 +207,6 @@ export default {
         username: "",
         pass: ""
       },
-      loginReq:{
-        type: 202,
-        username: "",
-      },
-      regReq:{
-        type: 202,
-        username:"",
-      },
-
       
       rules: {
         username: [{ validator: checkUsername, trigger: "blur" }],
@@ -222,10 +214,7 @@ export default {
         checkPass: [{ validator: validatePass2, trigger: "blur" }],
         email: [{ validator: checkEmail, trigger: "blur" }]
       },
-      info: {
-        type:null,
-        username:'',
-      },
+
       cmKey:'',
       rsaKey:'',
       loginFormVisible: false,
@@ -270,21 +259,56 @@ export default {
           offset: 50,
           type: "success"
         });
-        this.$data.loginReq.username = this.$data.loginForm.username;
-        //let socket = new Socket();
-        //socket.write(JSON.stringify(this.$data.loginReq));
-        //let response = await socket.read();
-        //cmKey = JSON.parse(response);
-        //console.log(cmKey);
-        //async function a(loginReq){
-        //  await socket.read();
-        //};
-       //getAesKey(this.$data.loginReq)
+
+        var loginReq = {
+          type:202,
+          username:''
+        }
+        loginReq.username = this.$data.loginForm.username;
+
+        var test = getAesKey(loginReq)
+        console.log(test)
+
+        
+
+    //     this.$axios({
+    //       method:'post',
+    //       url:'http://219.223.198.230:10287',
+    //       data:test
+    //     })
+    //     .then((response) =>{
+    //       //let obj = '';
+    //       //obj += response;
+    //       //let AesKey = obj.slice(4);
+    //       console.log("this");
+    //       console.log(response);
+    //       //console.log("if is JSON"+ JSON.parse(AesKey));
+    //       //return AesKey;
+    //     }).catch((error) =>{ 
+    //       console.log(error);   
+    //       this.$message({
+    //         showClose:true,
+    //         message:error,
+    //         type:'error',
+    //         duration:0
+    //     })
+    // })
+        //getAesKey(loginReq);
+        //console.log(enc);
+        //this.$data.cmKey = rsaDecrypt(enc);
+        //var encloginForm = aesEncrypt(this.$data.loginForm, this.$data.cmKey)
 
 
 
-
-
+        //var text = this.$data.loginForm;
+        //console.log(text);
+        //var a= aesEncrypt(text , '1234567890123456');
+        //console.log(a);
+        //var b= aesDecrypt(a , '1234567890123456');
+        //console.log(b);
+        //this.$data.info = JSON.parse(b);
+        //console.log(this.$data.info);
+        //console.log(this.$data.loginForm)
 
 
 
@@ -292,6 +316,12 @@ export default {
           this.loginFormVisible = true;
         }, 1000);
       } else {
+
+
+        this.$router.push({path:'/Console'})
+
+
+
         this.$notify({
           title: "温馨提示",
           message: "请填写正确的登录信息",
@@ -299,14 +329,19 @@ export default {
           offset: 50,
           type: "warning"
         });
-        var text = JSON.stringify(this.$data.loginForm);
-        var a= aesEncrypt(text , '1234567890123456');
-        console.log(a);
-        var b= aesDecrypt(a , '1234567890123456');
-        console.log(b);
-        this.$data.info = JSON.parse(b);
-        var c = this.$data.info.username;
-        console.log(c);
+        
+        var text = "this is a test message";
+        var enc = rsaEncrypt(text);
+        console.log(enc);
+        var msg = rsaDecrypt(enc);
+        console.log(msg);
+
+        this.$data.cmKey = getAesKey(enc);
+        console.log(this.$data.cmKey);
+
+
+
+
       }
     },
     handleCompleteLogin() {
@@ -320,11 +355,6 @@ export default {
         this.isEmailChecked &&
         this.agreed2
       ) {
-        this.$data.regReq.username = this.$data.regForm.username;
-
-
-
-
         this.$notify({
           title: "温馨提示",
           message: "提交成功，请扫码采集身份信息！",
@@ -356,16 +386,10 @@ export default {
         type: "success"
       });
     },
-
-    // resetForm(formName) {
-    //   this.$refs[formName].resetFields();
-    // },
     success() {
-      console.log("success");
+      console.log("generate qrcode success");
     },
-    fail(err) {
-      console.log("fail", err);
-    }
+
   }
 };
 </script>
