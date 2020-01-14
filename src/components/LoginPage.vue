@@ -271,28 +271,28 @@ export default {
 
         
 
-    //     this.$axios({
-    //       method:'post',
-    //       url:'http://219.223.198.230:10287',
-    //       data:test
-    //     })
-    //     .then((response) =>{
-    //       //let obj = '';
-    //       //obj += response;
-    //       //let AesKey = obj.slice(4);
-    //       console.log("this");
-    //       console.log(response);
-    //       //console.log("if is JSON"+ JSON.parse(AesKey));
-    //       //return AesKey;
-    //     }).catch((error) =>{ 
-    //       console.log(error);   
-    //       this.$message({
-    //         showClose:true,
-    //         message:error,
-    //         type:'error',
-    //         duration:0
-    //     })
-    // })
+        this.$axios({
+          method:'post',
+          url:'http://219.223.198.230:10286',
+          data:test
+        })
+        .then((response) =>{
+          //let obj = '';
+          //obj += response;
+          //let AesKey = obj.slice(4);
+          console.log("response");
+          console.log(response);
+          //console.log("if is JSON"+ JSON.parse(AesKey));
+          //return AesKey;
+        }).catch((error) =>{ 
+          console.log(error);   
+          this.$message({
+            showClose:true,
+            message:error,
+            type:'error',
+            duration:0
+        })
+    })
         //getAesKey(loginReq);
         //console.log(enc);
         //this.$data.cmKey = rsaDecrypt(enc);

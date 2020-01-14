@@ -59,10 +59,17 @@ module.exports = (options = {}) => ({
     port: 8010,
     proxy: {
       '/api/': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://219.223.195.242:8082',
         changeOrigin: true,
         pathRewrite: {
           '^/api': ''
+        }
+      },
+      '/amazon/': {
+        target: 'https://s3.amazonaws.com',
+        changeOrigin: true,
+        pathRewrite: {
+          '^/amazon': ''
         }
       }
     },

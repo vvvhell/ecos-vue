@@ -17,6 +17,7 @@ Vue.use(VueRouter)
 Vue.prototype.$axios = axios
 Vue.prototype.$jsEncrypt = JsEncrypt
 
+
 const router = new VueRouter({
   mode:'history',
   routes:routers

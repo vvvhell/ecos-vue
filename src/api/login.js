@@ -11,19 +11,19 @@ export function getAesKey(data){
     const str = JSON.stringify(data)
     const buf = Buffer.from(str)
     // 获取要传输的字符串长度
-    let num = buf.length
-    // 构建要生成buffer的数组，会往数组头部加4位数字
-    let arr = []
-    arr.push(num / 16581375)
-    num = num % 16581375
-    arr.push(num / 65025)
-    num = num % 65025
-    arr.push(num / 255)
-    num = num % 255
-    arr.push(num)
-    let buf2 = Buffer.from(arr)
-    let buf3 = Buffer.concat([buf2, buf])
-    return buf3
+    // let num = buf.length
+    // // 构建要生成buffer的数组，会往数组头部加4位数字
+    // let arr = []
+    // arr.push(num / 16581375)
+    // num = num % 16581375
+    // arr.push(num / 65025)
+    // num = num % 65025
+    // arr.push(num / 255)
+    // num = num % 255
+    // arr.push(num)
+    // let buf2 = Buffer.from(arr)
+    // let buf3 = Buffer.concat([buf2, buf])
+    return buf
     // axios({
     //     method:'post',
     //     url:baseURL,
