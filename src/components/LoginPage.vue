@@ -273,8 +273,8 @@ export default {
 
         this.$axios({
           method:'post',
-          url:'http://219.223.198.230:10286',
-          data:test
+          url:'http://222.29.25.20:10286',
+          data:Req
         })
         .then((response) =>{
           //let obj = '';
