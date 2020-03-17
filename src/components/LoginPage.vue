@@ -117,9 +117,9 @@
 
 <script>
 
-//import Socket from './api/socket'
+import { JSEncrypt } from 'jsencrypt/bin/jsencrypt';
 import '../api/login'
-import { getAesKey, encrypt, decrypt, aesEncrypt, aesDecrypt, rsaEncrypt, rsaDecrypt } from '../api/login';
+import { getAesKey, encrypt, decrypt, aesEncrypt, aesDecrypt, rsaEncrypt, rsaDecrypt, utf16ToUtf8 } from '../api/login';
 
 export default {
   data() {
@@ -191,7 +191,6 @@ export default {
         }
       }, 500);
     };
-    var qrcontent = "123"; //二维码内容
 
 
     return {
@@ -215,8 +214,7 @@ export default {
         email: [{ validator: checkEmail, trigger: "blur" }]
       },
 
-      cmKey:'',
-      rsaKey:'',
+      aesKey:'',
       loginFormVisible: false,
       registerFormVisible: false,
       registerForm2Visible: false,
@@ -229,7 +227,7 @@ export default {
         views: [
           {
             type: "qrcode",
-            content: qrcontent,
+            content: "",
             background: "#fff",
             color: "#000",
             width: 250,
@@ -239,15 +237,7 @@ export default {
       }
     };
   },
-  // mounted() {
-  //    this.$axios.post('',this.msg)
-  //    .then(response => (this.info = response))
-  //    .catch(function(error) {
-  //        // 请求失败处理
-  //        console.log(error);
 
-  //      });
-  //  },
   methods: {
 
     handleLogin() {
@@ -260,30 +250,37 @@ export default {
           type: "success"
         });
 
+        //获取aesKey
+        //获取aesKey的请求格式
         var loginReq = {
           type:202,
           username:''
         }
         loginReq.username = this.$data.loginForm.username;
-
-        var test = getAesKey(loginReq)
-        console.log(test)
-
-        
-
+        var Req = getAesKey(loginReq)
+        //发送获取aesKey请求
         this.$axios({
           method:'post',
           url:'http://222.29.25.20:10286',
           data:Req
         })
         .then((response) =>{
-          //let obj = '';
-          //obj += response;
-          //let AesKey = obj.slice(4);
-          console.log("response");
+          console.log("response: ");
           console.log(response);
-          //console.log("if is JSON"+ JSON.parse(AesKey));
-          //return AesKey;
+          //解密获取aesKey
+          var str = "";
+          str = response.data.cmKey;
+          console.log("str", str);
+          let jse = new JSEncrypt();
+          const privateKey = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCUXE1H9n+uRZWxKU0jpRq1blVNyxpx/6lX4GzUErPoLa9sgxF8GU//6xwcqfq+ngFwL51Z07Tt9I8Tm41wSTHBj20f9zOJvWYCodULhAuxwUUeWjnlBCgPUlCJvhIHfV01+sFJBlsogs+BfV9jSYNEphpQLAY/PBuSmObBmGFlzeg0fKCxgTAQMBd0qSO30Co0aOE7TQhjae6OvNFrd6HlHhnhKf6e05wjPyWnb7CtBKDUOGTHimqcp2K8RyN3poiZSsVgYIUoAeLrXKk3bO/8OZd+pyPSiZ/JvOnIoJ6ZZSrUB30fAltaSWYZoytG/rUPX2lO5QRr0AlXmPMbV9WBAgMBAAECggEAAe0s57lQsR+gMPu7T7IuJZr4Kplvj3llZom4gAx6H5KwS3VsPbNKcaVI6Spf4ifFFwLXRTpViB172iJT9NhOeBf3r8mS9r/p2jDlxk+Bo15CGoHLbKjgKErGVvOL4mMDWdcWuW8GsgD41tKc8Xob5UFO6CmaLyoFpaKspGjpItxDjPw6cd0r6fJ5Di3SdgZ9+DizTGzoOWl9H9kDpbhnqkLiyrwjEjXOmAzO7pDWh0QATV2/DE2KjVtbmZKSlI4MIyKAv2lf997lQ7iVtgXJ37vGab+oPRIg2jjAHaJJgkvL49OejJX2LYKKQsMUDZS3Ma6t/S5mk0SNb0ysQSQ/QQKBgQDN7UsUp/YA4f7sdwvE9C3iWj14Kv1Es3pNuP0DBYWK4gX8aUima8XKbvHZ8Y8RxnsFkZd4CQU/MaY/yRI5KVMyS1sianIWtTWShkrjO6INYl7E28YJcQYBxdByAUCgL9wdwlQkbuUjsrl+XrsCUlcp9XV5orYctn40jO5XwuOjaQKBgQC4b5H7UFo3kVjgMMqaEnaptKqAfXLD5F2RZEwkNmZkbIRlLZk0mRHJ7QlQtj9Z+yKN6d8SCAthS7739A6qMUH7ZrY2/bdEQmgZdaj1B6zVgjIEak20Lt2WFrG0uuuIUHmnNCRXuUk1aCxm4x12EZpf9sFsjkjZXlfv6QRi2MEWWQKBgQDKc6Nf8G0TmxvUAInqnSFLKurJ7IHI/CaeqOLeCJys2N+Hsz6Alu4CwiY13Z2JnTevVt6yXTPyV+6ZQSYQWod3p8w2Pq5hks/TeQHA+wyr2e1P3r2I5LxCG+d9XavakJL4EuhEVV4jRX/GNH3on2kgUDipWAVwnx3erjtYvrqsGQKBgDgzNyZ/S55XGd/mvjXInoQD21if4VKzyZc+Gr2GHhlHv+gcxuxyICuJoScJAbDnh5X6x9B0xxL0w9JGehl+PP7gQ3HqSefw3Eu1wLA5kH7W12rlAZyAE2FitO+/bXnyG7/JcbGRci9l+PG5DwclQgcv56yuhqBF0UH3nTCJn/yxAoGBAIDJJtaVBPNCZ4KkIMg/TRdMwEAqJuKVBzYn/xsNNTJlmp9XX9EsNlH590xz8KlqNpLkNJJYsy/Jk4EVEUfV2IovhGkUrIcmLb5UbTCItO2arpHh/6wne9iA5CnmZREyfLUpnueg0V2TKQwmdjGqN9U5RpVE1+H2TPfUJ4j+53Hv"
+          jse.setPrivateKey(privateKey);
+          var a = "";
+          a = jse.decrypt(str);
+          console.log("a", a);
+          // this.$data.aesKey = jiemi;
+          // console.log(this.$data.aesKey);
+            
+
         }).catch((error) =>{ 
           console.log(error);   
           this.$message({
@@ -309,43 +306,39 @@ export default {
         //this.$data.info = JSON.parse(b);
         //console.log(this.$data.info);
         //console.log(this.$data.loginForm)
-
+        
+        //设置二维码中的内容
+        // var qrcontent = {
+        //   cmIp:"222.29.67.129:10286",
+        //   cmKey:""
+        // };
+        // qrcontent.cmKey = this.$data.aesKey;
+        // this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+        // console.log(this.$data.painting.views[0].content);
 
 
         setTimeout(() => {
           this.loginFormVisible = true;
         }, 1000);
+
       } else {
-
-
-        this.$router.push({path:'/Console'})
-
-
-
         this.$notify({
           title: "温馨提示",
           message: "请填写正确的登录信息",
           duration: 5000,
           offset: 50,
           type: "warning"
-        });
-        
-        var text = "this is a test message";
-        var enc = rsaEncrypt(text);
-        console.log(enc);
-        var msg = rsaDecrypt(enc);
-        console.log(msg);
+        });  
 
-        this.$data.cmKey = getAesKey(enc);
-        console.log(this.$data.cmKey);
-
-
-
+        var str = "jenUGhFePcGAIjGvIvwj/JtYyczYWhvvkIe+Sdsuc9FtlByptxXHgjyHhKXUe3LGQbXBXRXu1yBhvPiSjplcy5ripUL9Nd1DFbbQLAB9YjRyq/WDQlYq8GL6P1G+sbBI0i7xM8YF9VtYylJHSZksdsenFaohGuY7Sm3wHZg22+kT/Dp2gsLTc3aMYmrMW9RZrhfRxI5PsG+BmItxRsi1vtXHjOGcyIDsqoLwZungTSf1NBqBp/vZ6QD3z53DDBIfTC6hNkiZ/xfdxtZs3jNPPnl3BNrA7JnMqt5uZSqWZk6TrYIkD6NHwffBKrAoYG79KPLobxTM6GrtfgyZ2ZaPiw==";
+        var jiemi = rsaDecrypt(str);
+        console.log(jiemi);
 
       }
     },
     handleCompleteLogin() {
       this.loginFormVisible = false;
+      this.$router.push({path:'/Console'});
     },
     handleRegUserInfo() {
       if (

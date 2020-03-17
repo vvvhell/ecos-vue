@@ -26,9 +26,8 @@
 						@close="handleClose"
 						background-color="#a6a5c4"
 						text-color="#322A54"
-						active-text-color="#fff"
-						:router="true">
-						<el-menu-item index="1">
+						active-text-color="#fff">
+						<el-menu-item index="1" v-on:click="openOverview">
 							<i class="el-icon-view"></i>
 							<span slot="title">概览</span>					
 						</el-menu-item>
@@ -48,7 +47,7 @@
 											:fetch-suggestions="querySearch"
 											@select="handleSelect"></el-autocomplete>
 								</el-menu-item>								
-								<el-menu-item v-for="(bucket) in buckets" v-bind:key="bucket.Name" @click="handleJump(bucket)">									
+								<el-menu-item v-for="(bucket) in buckets" v-bind:key="bucket.Name" @click="handleJump(bucket)" v-on:click="openDetail">									
 									<span>• {{bucket.Name}}</span>
 									<el-button
 										class="deleteicon" 
@@ -67,7 +66,7 @@
         <el-container>
           <el-main>
 
-						<!-- <el-row> 
+						<el-row v-show="overviewvisible"> 
 							<el-card>
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
 								<el-divider></el-divider>
@@ -76,7 +75,7 @@
 										<div class="subview">{{bucketNum}} 个</div>
 										</el-card></el-col>
 									<el-col :span="7"><el-card>全部Bucket已用空间
-										<div class="subview">{{totalVol}} G</div>
+										<div class="subview">{{(totalVol).toFixed(2)}} MB</div>
 										</el-card></el-col>
 									<el-col :span="7"><el-card>全部Bucket文件数
 										<div class="subview">{{fileNum}} 个</div>
@@ -84,15 +83,15 @@
 								</el-row>
 							</el-card>
 						</el-row>
-						<el-row style="margin-top:25px">
+						<el-row style="margin-top:25px" v-show="overviewvisible">
 							<el-card>
 								<div class="overview"><span><i class="el-icon-files"></i>&nbsp; Bucket管理</span></div>
 								<el-divider></el-divider>
 								<el-button type="primary" @click="createdrawer = true">创建Bucket</el-button>
 							</el-card>
-						</el-row> -->
+						</el-row>
 
-						<el-row> 
+						<el-row v-show="detailvisible"> 
 							<el-card>
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
 								<el-divider></el-divider>
@@ -106,11 +105,11 @@
 								</el-row>
 							</el-card>
 						</el-row>
-						<el-row style="margin-top:25px">
+						<el-row style="margin-top:25px" v-show="detailvisible">
 							<el-card>
-								<el-button type="primary" icon="el-icon-plus" @click="uploadfile">上传文件</el-button>
+								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload">上传文件</el-button>
 								<el-table
-									:data="tableData"
+									:data="objects"
 									height="380"
 									stripe
 									style="width: 100%">
@@ -118,7 +117,8 @@
 									</el-table-column>
 									<el-table-column label="文件大小" width="250">
 										<template slot-scope="scope">
-											{{scope.row.Size}}&nbsp; KB
+											{{(scope.row.Size/1024).toFixed(2)}}&nbsp; KB
+											
 										</template>	
 									</el-table-column>
 									<el-table-column label="操作">
@@ -126,7 +126,7 @@
 											<el-button
 												type="primary"
 												size="mini"
-												@click="handleDownload(scope)">下载</el-button>
+												@click="handleDownload(scope)" >下载</el-button>
 											<el-button 
 												type="info"
 												size="mini"
@@ -178,9 +178,29 @@
 					<el-drawer	class="detaildrawer" :with-header="false" :visible.sync="detaildrawer">
 						<div class="drawer-title">文件详情</div>
 						<div style="margin-bottom:20px"><span style="display: inline-block; width: 100px">文件名:</span>{{objectName}}</div>
-						<div style="margin-bottom:20px"><span style="display: inline-block; width: 100px">Etag:</span>{{Etag}}</div>
+						<div style="margin-bottom:20px"><span style="display: inline-block; width: 100px">ETag:</span>{{ETag}}</div>
 						<div><span style="display: inline-block; width: 100px">修改时间:</span>{{LastModified}}</div>
 					</el-drawer>
+
+					<el-dialog :visible.sync="uploadvisible" style="width: 40vx, text-align:center">
+						<el-upload
+							class="uploadfile"
+							drag
+							action="doUpload" 
+							multiple
+							:file-list="fileList"
+							:before-upload="beforeUpload"
+							:auto-upload="false"
+							:on-change="onUploadChange"
+							style="text-align:center">
+							<i class="el-icon-upload"></i>
+							<div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+						</el-upload>
+						<div slot="footer" class="dialog-footer">
+							<el-button @click="uploadvisible = false">取 消</el-button>
+							<el-button type="primary" @click="submitUpload">确 定</el-button>
+						</div>
+					</el-dialog>　　
 
         </el-container>
       </el-container>
@@ -191,7 +211,7 @@
 <script type="text/ecmascript-6">
 import { S3 } from 'aws-sdk';
 import '../api/s3api'
-import { listBuckets, createBucket, listObjects, deleteBucket } from '../api/s3api';
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject } from '../api/s3api';
 export default {
   data() {
 
@@ -199,18 +219,21 @@ export default {
 			buckets:[],
 			state:'',
 			bucketNum: '',
-			totalVol: 10,
-			fileNum: 100,
+			totalVol: 0,
+			fileNum: 0,
 			newBucketName:"",
 
 			drawer: false,
 			createdrawer: false,
 			detaildrawer: false,
 			deletevisible: false,
+			overviewvisible: true,
+			detailvisible: false,
+			uploadvisible: false,
 
 			bucketName: '',
 			objectName: '',
-			Etag: '',
+			ETag: '',
 			LastModified: '',
 
 			objects:[],
@@ -218,31 +241,10 @@ export default {
 			bucketVol:'',
 			scope:[],
 
-			tableData: [{
-          Key: "file1.jpg",
-          Size: 1024,
-        }, {
-  				Key: "file2.jpg",
-          Size: 15641,
-        }, {
- 					Key: "file3.jpg",
-          Size: 489615,
-        }, {
- 					Key: "file4.jpg",
-          Size: 7489845,
-        },{
- 					Key: "file5.jpg",
-          Size: 611,
-        },{
-  				Key: "file6.jpg",
-          Size: 47891,
-        },{
-  				Key: "file7.jpg",
-          Size: 1331,
-        },{
-  				Key: "file8.jpg",
-          Size: 1000,
-        }]
+			fileList: [],
+
+
+
     };
   },
   methods: {    
@@ -266,15 +268,11 @@ export default {
 		//listObjects获取Object列表
 		handleJump(bucket){
 			console.log(bucket.Name, "jump");
+			// this.totalVol = 0;
+			// this.fileNum = 0;
 			var param = bucket.Name;
-			this.objects = this.loadObjects(param);
-			this.objectNum = this.tableData.length;
-			var Vol = 0;
-			for(var i=0; i<this.objectNum; i++){
-				Vol += this.tableData[i].Size;
-			};
-			Vol = Vol/1024
-			this.bucketVol = Vol.toFixed(2);			
+			this.objects = this.loadObjects(param);	
+			this.$data.bucketName = param;			
 		},
 		//管理创建Bucket抽屉
 		handleCancel() {
@@ -293,15 +291,8 @@ export default {
 				}
 				if(existed == 0){
 					console.log("创建bucket");
-					createBucket(this.newBucketName);
 					this.$data.createdrawer = false;
-					this.$notify({
-							title: "温馨提示",
-							message: "Bucket创建成功",
-							duration: 5000,
-							offset: 50,
-							type: "success"
-						});
+					this.buildBucket(this.newBucketName);					
 				}else{
 					console.log("Bucket已存在");
 						this.$notify({
@@ -343,37 +334,86 @@ export default {
 		//搜索框中选择
 		handleSelect(item){
 			console.log(item);
+			this.objects = this.loadObjects(item.value);
 		},
 		//管理删除bucket
 		handleDeleteBucket(bucket){
 			console.log("delete",bucket.Name);
-			if(this.$data.objectNum !==0){
+			var name = bucket.Name;
+			if(this.objectNum !== 0){
 				this.$message({
-						showClose: true,
-						message: 'Bucket内容不为空，删除失败',
-						type: 'error'
-					});
+							showClose: true,
+							message: 'Bucket内容不为空，删除失败',
+							type: 'error'
+						});
 			}else{
-				var name = bucket.Name;
 				deleteBucket(name);
-			}			
+					this.$notify({
+							title: "温馨提示",
+							message: "Bucket删除成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
+			setTimeout(() => {
+						this.loadAll();
+        }, 2000);
+			}
 		},
+
 		//上传文件
 		uploadfile(){
-			console.log("uploadfile")
+			console.log("uploadfile to:", this.bucketName);
+			this.$data.uploadvisible = true;
 		},
+		onUploadChange(file){
+			console.log("文件：", file);
+			this.file = file.raw;
+			this.fileName = file.raw.name;
+			var name = this.bucketName;
+			var key = this.fileName;
+			var fileReader = new FileReader();
+			//载入文件
+			fileReader.readAsArrayBuffer(this.file);
+			//文件载入成功
+			fileReader.onload = function(){
+				//读取完成后，数据保存在对象的result属性中
+				console.log(this.result);
+				var blob = new Blob([this.result]);
+				putObject(blob, name, key);
+			}			
+		},
+		beforeUpload(file){
+
+			this.file = file;
+			this.fileName = file.name;
+			
+		},
+		submitUpload(){
+			console.log("上传：", this.fileName);
+			if(this.fileName == undefined){
+				this.$message.warning('请选择要上传的文件！')
+				return false
+			}else{
+				this.loadObjects(this.bucketName);
+				this.$data.uploadvisible = false;
+			}
+			
+		},
+
 		//下载文件
 		handleDownload(scope){
 			console.log("下载",scope.row.Key);
+			let bucket = this.$data.bucketName;
+			let key = scope.row.Key;
+			this.downloadObj(bucket, key);
 		},
 		//文件详情
 		handleInfo(scope){
 			this.$data.detaildrawer = true;
-			this.$data.objectName = scope.row.Key;
-			this.$data.Etag = scope.row.Size;
-			this.$data.LastModified = scope.row.Key;
-			// this.$data.Etag = scope.row.Etag;
-			// this.$data.LastModified = scope.row.LastModified;
+			this.$data.objectName = scope.row.Key;			
+			this.$data.ETag = scope.row.ETag;
+			this.$data.LastModified = scope.row.LastModified;
 			console.log("详情",scope.row.Key);
 		},
 		//删除文件
@@ -384,7 +424,24 @@ export default {
 		handleDeleteObj(){
 			let scope = this.$data.scope;
 			console.log("删除",scope.row.Key);
+			let bucket = this.$data.bucketName;
+			let key = scope.row.Key;
+			var msg = deleteObject(bucket, key);
 			this.$data.deletevisible = false;
+			this.objects = this.loadObjects(bucket);
+			if(msg){
+				this.$message({
+					showClose: true,
+					message: "删除成功",
+					type: 'success'
+				});
+			}else{
+				this.$message({
+					showClose: true,
+					message: "删除失败",
+					type: 'error'
+				});
+			}			
 		},
 		//listBuckets
 		loadAll(){
@@ -397,6 +454,12 @@ export default {
 				console.log(value);
 				this.buckets = value;
 				this.bucketNum = this.buckets.length;
+				for(var i=0;i<this.bucketNum;i++){
+					console.log(this.buckets[i].Name);
+					this.totalVol = 0;
+					this.fileNum = 0;
+					this.loadObjects2(this.buckets[i].Name);
+				}
 			})
 			return this.buckets;
 		},
@@ -411,15 +474,122 @@ export default {
 			fn2(value => {
 				console.log(value);
 				this.objects = value;
-				// this.objectNum = this.objects.length;
+				this.objectNum = this.objects.length;
+				var Vol = 0;
+				for(var i=0; i<this.objectNum; i++){
+					Vol += this.objects[i].Size;
+				};
+				Vol = Vol/1024/1024
+				this.bucketVol = Vol.toFixed(2);	
 			})
-			console.log(this.objects)
 			return this.objects;
 		},
+		//计算概览数据
+		loadObjects2(param){
+			function fn2(callback){
+				let bucket = param;
+				listObjects(bucket).then(function(value){
+					callback(value);
+				});
+			};
+			fn2(value => {
+				console.log(value);
+				this.objects = value;
+				this.objectNum = this.objects.length;
+				var Vol = 0;
+				for(var i=0; i<this.objectNum; i++){
+					Vol += this.objects[i].Size;
+				};
+				Vol = Vol/1024/1024;
+				this.totalVol += Vol;
+				this.fileNum += this.objectNum;	
+			})
+			return this.objects;
+		},
+		//getObject
+		downloadObj(bucket, key){
+			function fn3(callback){
+				if(getObject(bucket, key)==0){
+					this.$message({
+					showClose: true,
+					message: "下载失败",
+					type: 'error'
+				});
+				}else{
+					getObject(bucket, key).then(function(value){
+					callback(value);
+				})
+				}
+			};
+			fn3(value =>{
+			var content = value;
+			var blob = new Blob([content], {type:"stream"})
+			console.log("blob", blob);
+			var saveData = (function(blob, key) {
+				var a = document.createElement("a");
+				document.body.appendChild(a);
+				a.style = "display: none";
+				return function (blob, key) {
+					var url = window.URL.createObjectURL(blob);
+					a.href = url;
+					a.download = key;
+					a.click();
+					window.URL.revokeObjectURL(url);
+				};
+			}());
+			saveData(blob, key);
+			})					
+		},
+		//createbucket
+		buildBucket(name){
+			function fn4(callback){
+				createBucket(name).then(function(value){
+					callback(value);
+				});
+			};
+			fn4(value => {
+				console.log(value);
+				var result1 = "/" + this.newBucketName;
+				console.log("result1:", result1);
+				if(value === result1){
+					this.$notify({
+						title: "温馨提示",
+						message: "Bucket创建成功",
+						duration: 5000,
+						offset: 50,
+						type: "success"
+					});
+					this.loadAll();
+				}else{
+					this.$notify({
+						title: "温馨提示",
+						message: "Bucket创建失败",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+				}
+			})
+		},
+
+		//打开概览界面
+		openOverview(){
+			console.log("概览");
+			this.$data.overviewvisible = true;
+			this.$data.detailvisible = false;
+			this.loadAll();
+		},
+		//打开详情页面
+		openDetail(){
+			console.log("详情");
+			this.$data.overviewvisible = false;
+			this.$data.detailvisible = true;
+		}
 
 	},
 	mounted(){		
 		this.buckets = this.loadAll();
+						
 	}
 };
 </script>
