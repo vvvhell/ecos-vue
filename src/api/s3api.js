@@ -1,7 +1,7 @@
 var AWS = require("aws-sdk");
 AWS.config.update({
 		//accessKeyId:'AKIAX4SGBFHBY7F6646P', secretAccessKey:'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',
-		accessKeyId:'AKIAIUXLGRW5TS4O42GQ', secretAccessKey:'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',
+		accessKeyId:"AKIAJZ6MZOEXNN77NAZA", secretAccessKey:"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",
 		s3ForcePathStyle: true,	
 
 });
@@ -78,10 +78,11 @@ export async function putObject(data, bucket, key){
 	}
 }
 
-export async function getObject(bucket, key){
+export async function getObject(bucket, key, range){
 	const params = {
 		Bucket: bucket,
-		Key: key
+		Key: key,
+		Range: range,
 	};
 	try {
 		const data = await s3.getObject(params).promise();

@@ -71,13 +71,13 @@
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
 								<el-divider></el-divider>
 								<el-row :gutter="30">
-									<el-col :span="7"><el-card>Bucket数量
+									<el-col :span="7"><el-card v-loading="loading1">Bucket数量
 										<div class="subview">{{bucketNum}} 个</div>
 										</el-card></el-col>
-									<el-col :span="7"><el-card>全部Bucket已用空间
+									<el-col :span="7"><el-card v-loading="loading2">全部Bucket已用空间
 										<div class="subview">{{(totalVol).toFixed(2)}} MB</div>
 										</el-card></el-col>
-									<el-col :span="7"><el-card>全部Bucket文件数
+									<el-col :span="7"><el-card v-loading="loading2">全部Bucket文件数
 										<div class="subview">{{fileNum}} 个</div>
 										</el-card></el-col>
 								</el-row>
@@ -96,10 +96,10 @@
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
 								<el-divider></el-divider>
 								<el-row :gutter="30">									
-									<el-col :span="7"><el-card>已使用的存储空间
+									<el-col :span="7"><el-card v-loading="loadingtable">已使用的存储空间
 										<div class="subview1">{{bucketVol}} MB</div>
 										</el-card></el-col>
-									<el-col :span="7"><el-card>已存储的文件数量
+									<el-col :span="7"><el-card v-loading="loadingtable">已存储的文件数量
 										<div class="subview1">{{objectNum}} 个</div>
 										</el-card></el-col>
 								</el-row>
@@ -109,6 +109,7 @@
 							<el-card>
 								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload">上传文件</el-button>
 								<el-table
+									v-loading="loadingtable"
 									:data="objects"
 									height="380"
 									stripe
@@ -117,11 +118,10 @@
 									</el-table-column>
 									<el-table-column label="文件大小" width="250">
 										<template slot-scope="scope">
-											{{(scope.row.Size/1024).toFixed(2)}}&nbsp; KB
-											
+											{{(scope.row.Size/1024).toFixed(2)}}&nbsp; KB											
 										</template>	
 									</el-table-column>
-									<el-table-column label="操作">
+									<el-table-column label="操作" width="350">
 										<template slot-scope="scope">											
 											<el-button
 												type="primary"
@@ -134,10 +134,13 @@
 											<el-button 
 												size="mini"
 												type="danger"
-												@click="handlescope(scope)">删除</el-button>
-
-											
+												@click="handlescope(scope)">删除</el-button>											
       							</template>
+									</el-table-column>
+									<el-table-column label="下载进度">
+										<template slot-scope="scope" :v-show="progressBar(scope)">
+										<el-progress :percentage='percentage(scope)' :color="customColors" ></el-progress>
+										</template>
 									</el-table-column>
 								</el-table>
 							</el-card>
@@ -195,6 +198,7 @@
 							style="text-align:center">
 							<i class="el-icon-upload"></i>
 							<div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+							<div slot="tip" class="el-upload__tip">选择的文件将自动开始上传</div>
 						</el-upload>
 						<div slot="footer" class="dialog-footer">
 							<el-button @click="uploadvisible = false">取 消</el-button>
@@ -230,6 +234,9 @@ export default {
 			overviewvisible: true,
 			detailvisible: false,
 			uploadvisible: false,
+			loading1: true,
+			loading2: true,
+			loadingtable: true,
 
 			bucketName: '',
 			objectName: '',
@@ -242,6 +249,14 @@ export default {
 			scope:[],
 
 			fileList: [],
+
+			customColors: [
+				{color: '#f56c6c', percentage: 20},
+				{color: '#e6a23c', percentage: 40},
+				{color: '#5cb87a', percentage: 60},
+				{color: '#1989fa', percentage: 80},
+				{color: '#6f7ad3', percentage: 100}
+			]
 
 
 
@@ -265,7 +280,62 @@ export default {
 		handleClose(key, keyPath) {
 			console.log(key, keyPath);
 		},
-		//listObjects获取Object列表
+
+		//打开概览界面
+		openOverview(){
+			console.log("概览");
+			this.$data.overviewvisible = true;
+			this.$data.detailvisible = false;
+			this.loadAll();
+		},
+		//listBuckets
+		loadAll(){
+			this.loading1 = true;
+			this.loading2 = true;
+			function fn1(callback){
+				listBuckets().then(function(value){
+					callback(value);
+				});
+			};
+			fn1(value => {
+				console.log(value);
+				this.buckets = value;
+				this.bucketNum = this.buckets.length;
+				this.loading1 = false;
+				for(var i=0;i<this.bucketNum;i++){
+					console.log(this.buckets[i].Name);
+					this.totalVol = 0;
+					this.fileNum = 0;
+					this.loadObjects2(this.buckets[i].Name);
+					this.loading2 = false;
+				}			
+			})
+			return this.buckets;
+		},		
+		//计算概览数据
+		loadObjects2(param){
+			function fn2(callback){
+				let bucket = param;
+				listObjects(bucket).then(function(value){
+					callback(value);
+				});
+			};
+			fn2(value => {
+				console.log(value);
+				this.objects = value;
+				this.objectNum = this.objects.length;
+				var Vol = 0;
+				for(var i=0; i<this.objectNum; i++){
+					Vol += this.objects[i].Size;
+				};
+				Vol = Vol/1024/1024;
+				this.totalVol += Vol;
+				this.fileNum += this.objectNum;
+			})
+			return param;						
+		},
+		
+		//获取Object列表
 		handleJump(bucket){
 			console.log(bucket.Name, "jump");
 			// this.totalVol = 0;
@@ -274,6 +344,29 @@ export default {
 			this.objects = this.loadObjects(param);	
 			this.$data.bucketName = param;			
 		},
+		loadObjects(param){
+			function fn2(callback){
+				let bucket = param;
+				listObjects(bucket).then(function(value){
+					callback(value);
+				});
+			};
+			this.loadingtable = true;
+			fn2(value => {
+				console.log(value);
+				this.objects = value;
+				this.objectNum = this.objects.length;
+				var Vol = 0;
+				for(var i=0; i<this.objectNum; i++){
+					Vol += this.objects[i].Size;
+				};
+				Vol = Vol/1024/1024
+				this.bucketVol = Vol.toFixed(2);	
+				this.loadingtable = false;
+			})
+			return this.objects;
+		},		
+
 		//管理创建Bucket抽屉
 		handleCancel() {
 			this.$data.newBucketName = "";
@@ -315,232 +408,6 @@ export default {
 						});
 			}
 		},
-		//搜索框功能
-		querySearch(queryString, cb) {
-			var buckets = [];
-			for(var i=0;i<this.buckets.length;i++){
-				buckets.push({value:this.buckets[i].Name});
-				console.log(buckets)
-			}
-			var results = queryString ? buckets.filter(this.createFilter(queryString)) : buckets;
-			// 调用 callback 返回建议列表的数据
-			cb(results);
-		},
-		createFilter(queryString) {
-			return (bucket) => {
-				return (bucket.value.toLowerCase().indexOf(queryString.toLowerCase()) === 0);
-			};
-		},		
-		//搜索框中选择
-		handleSelect(item){
-			console.log(item);
-			this.objects = this.loadObjects(item.value);
-		},
-		//管理删除bucket
-		handleDeleteBucket(bucket){
-			console.log("delete",bucket.Name);
-			var name = bucket.Name;
-			if(this.objectNum !== 0){
-				this.$message({
-							showClose: true,
-							message: 'Bucket内容不为空，删除失败',
-							type: 'error'
-						});
-			}else{
-				deleteBucket(name);
-					this.$notify({
-							title: "温馨提示",
-							message: "Bucket删除成功",
-							duration: 5000,
-							offset: 50,
-							type: "success"
-						});
-			setTimeout(() => {
-						this.loadAll();
-        }, 2000);
-			}
-		},
-
-		//上传文件
-		uploadfile(){
-			console.log("uploadfile to:", this.bucketName);
-			this.$data.uploadvisible = true;
-		},
-		onUploadChange(file){
-			console.log("文件：", file);
-			this.file = file.raw;
-			this.fileName = file.raw.name;
-			var name = this.bucketName;
-			var key = this.fileName;
-			var fileReader = new FileReader();
-			//载入文件
-			fileReader.readAsArrayBuffer(this.file);
-			//文件载入成功
-			fileReader.onload = function(){
-				//读取完成后，数据保存在对象的result属性中
-				console.log(this.result);
-				var blob = new Blob([this.result]);
-				putObject(blob, name, key);
-			}			
-		},
-		beforeUpload(file){
-
-			this.file = file;
-			this.fileName = file.name;
-			
-		},
-		submitUpload(){
-			console.log("上传：", this.fileName);
-			if(this.fileName == undefined){
-				this.$message.warning('请选择要上传的文件！')
-				return false
-			}else{
-				this.loadObjects(this.bucketName);
-				this.$data.uploadvisible = false;
-			}
-			
-		},
-
-		//下载文件
-		handleDownload(scope){
-			console.log("下载",scope.row.Key);
-			let bucket = this.$data.bucketName;
-			let key = scope.row.Key;
-			this.downloadObj(bucket, key);
-		},
-		//文件详情
-		handleInfo(scope){
-			this.$data.detaildrawer = true;
-			this.$data.objectName = scope.row.Key;			
-			this.$data.ETag = scope.row.ETag;
-			this.$data.LastModified = scope.row.LastModified;
-			console.log("详情",scope.row.Key);
-		},
-		//删除文件
-		handlescope(scope){
-			this.$data.deletevisible = true;
-			this.$data.scope = scope;
-		},
-		handleDeleteObj(){
-			let scope = this.$data.scope;
-			console.log("删除",scope.row.Key);
-			let bucket = this.$data.bucketName;
-			let key = scope.row.Key;
-			var msg = deleteObject(bucket, key);
-			this.$data.deletevisible = false;
-			this.objects = this.loadObjects(bucket);
-			if(msg){
-				this.$message({
-					showClose: true,
-					message: "删除成功",
-					type: 'success'
-				});
-			}else{
-				this.$message({
-					showClose: true,
-					message: "删除失败",
-					type: 'error'
-				});
-			}			
-		},
-		//listBuckets
-		loadAll(){
-			function fn1(callback){
-				listBuckets().then(function(value){
-					callback(value);
-				});
-			};
-			fn1(value => {
-				console.log(value);
-				this.buckets = value;
-				this.bucketNum = this.buckets.length;
-				for(var i=0;i<this.bucketNum;i++){
-					console.log(this.buckets[i].Name);
-					this.totalVol = 0;
-					this.fileNum = 0;
-					this.loadObjects2(this.buckets[i].Name);
-				}
-			})
-			return this.buckets;
-		},
-		//listObjects
-		loadObjects(param){
-			function fn2(callback){
-				let bucket = param;
-				listObjects(bucket).then(function(value){
-					callback(value);
-				});
-			};
-			fn2(value => {
-				console.log(value);
-				this.objects = value;
-				this.objectNum = this.objects.length;
-				var Vol = 0;
-				for(var i=0; i<this.objectNum; i++){
-					Vol += this.objects[i].Size;
-				};
-				Vol = Vol/1024/1024
-				this.bucketVol = Vol.toFixed(2);	
-			})
-			return this.objects;
-		},
-		//计算概览数据
-		loadObjects2(param){
-			function fn2(callback){
-				let bucket = param;
-				listObjects(bucket).then(function(value){
-					callback(value);
-				});
-			};
-			fn2(value => {
-				console.log(value);
-				this.objects = value;
-				this.objectNum = this.objects.length;
-				var Vol = 0;
-				for(var i=0; i<this.objectNum; i++){
-					Vol += this.objects[i].Size;
-				};
-				Vol = Vol/1024/1024;
-				this.totalVol += Vol;
-				this.fileNum += this.objectNum;	
-			})
-			return this.objects;
-		},
-		//getObject
-		downloadObj(bucket, key){
-			function fn3(callback){
-				if(getObject(bucket, key)==0){
-					this.$message({
-					showClose: true,
-					message: "下载失败",
-					type: 'error'
-				});
-				}else{
-					getObject(bucket, key).then(function(value){
-					callback(value);
-				})
-				}
-			};
-			fn3(value =>{
-			var content = value;
-			var blob = new Blob([content], {type:"stream"})
-			console.log("blob", blob);
-			var saveData = (function(blob, key) {
-				var a = document.createElement("a");
-				document.body.appendChild(a);
-				a.style = "display: none";
-				return function (blob, key) {
-					var url = window.URL.createObjectURL(blob);
-					a.href = url;
-					a.download = key;
-					a.click();
-					window.URL.revokeObjectURL(url);
-				};
-			}());
-			saveData(blob, key);
-			})					
-		},
-		//createbucket
 		buildBucket(name){
 			function fn4(callback){
 				createBucket(name).then(function(value){
@@ -572,19 +439,242 @@ export default {
 			})
 		},
 
-		//打开概览界面
-		openOverview(){
-			console.log("概览");
-			this.$data.overviewvisible = true;
-			this.$data.detailvisible = false;
-			this.loadAll();
+		//搜索框功能
+		querySearch(queryString, cb) {
+			var buckets = [];
+			for(var i=0;i<this.buckets.length;i++){
+				buckets.push({value:this.buckets[i].Name});
+				console.log(buckets)
+			}
+			var results = queryString ? buckets.filter(this.createFilter(queryString)) : buckets;
+			// 调用 callback 返回建议列表的数据
+			cb(results);
 		},
+		createFilter(queryString) {
+			return (bucket) => {
+				return (bucket.value.toLowerCase().indexOf(queryString.toLowerCase()) === 0);
+			};
+		},		
+		//搜索框中选择
+		handleSelect(item){
+			console.log(item);
+			this.objects = this.loadObjects(item.value);
+			this.overviewvisible = false;
+			this.detailvisible = true;
+		},
+
+		//删除bucket
+		handleDeleteBucket(bucket){
+			console.log("delete",bucket.Name);
+			var name = bucket.Name;
+			if(this.objectNum !== 0){
+				this.$message({
+							showClose: true,
+							message: 'Bucket内容不为空，删除失败',
+							type: 'error'
+						});
+			}else{
+				deleteBucket(name);
+					this.$notify({
+							title: "温馨提示",
+							message: "Bucket删除成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
+			setTimeout(() => {
+						this.loadAll();
+        }, 2000);
+			}
+		},
+
 		//打开详情页面
 		openDetail(){
 			console.log("详情");
 			this.$data.overviewvisible = false;
 			this.$data.detailvisible = true;
-		}
+		},
+
+		//上传文件
+		uploadfile(){
+			console.log("uploadfile to:", this.bucketName);
+			this.$data.uploadvisible = true;
+		},
+		onUploadChange(file){
+			console.log("文件：", file);
+			this.file = file.raw;
+			this.fileName = file.raw.name;
+			var name = this.bucketName;
+			var key = this.fileName;
+			var fileReader = new FileReader();
+			//载入文件
+			fileReader.readAsArrayBuffer(this.file);
+			var that = this;
+			//文件载入成功
+			fileReader.onload = async function(){
+				//读取完成后，数据保存在对象的result属性中
+				console.log(this.result);
+				var blob = new Blob([this.result]);
+				var msg = await putObject(blob, name, key);
+				if(msg !==""){
+					that.$notify({
+						title: "温馨提示",
+						message: key+"\n上传成功",
+						duration: 5000,
+						offset: 50,
+						type: "success"
+					});
+					that.loadObjects(name);
+				}else{
+					that.$notify({
+						title: "温馨提示",
+						message: "文件上传失败",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+				}
+			}		
+		},
+		beforeUpload(file){
+			this.file = file;
+			this.fileName = file.name;			
+		},
+		submitUpload(){
+			console.log("上传：", this.fileName);
+			if(this.fileName == undefined){
+				this.$message.warning('请选择要上传的文件！')
+				return false
+			}else{
+				this.$data.uploadvisible = false;
+			}
+			
+		},
+
+		//下载文件
+		handleDownload(scope){
+			console.log("下载",scope.row.Key);
+			var bucket = this.$data.bucketName;
+			var key = scope.row.Key;
+			var size = scope.row.Size;
+			var fileSize= 1*1024*1024;
+			if(size>fileSize){
+				this.downloadBigobj(bucket, key, size);
+			}else{
+				this.downloadObj(bucket, key);
+			}
+		},
+		progressBar(scope){
+			if(scope.row.isdownloading === true){
+				console.log("true");
+				return true;
+			}else{
+				return false;
+			}
+		},
+		percentage(scope){
+			return scope.row.percentage;
+		},
+		downloadObj(bucket, key){
+			function fn3(callback){
+				getObject(bucket, key).then(function(value){
+				callback(value);
+				})
+			};
+			fn3(value =>{
+			var content = value;
+			var blob = new Blob([content], {type:"stream"})
+			console.log("blob", blob);
+			var saveData = (function(blob, key) {
+				var a = document.createElement("a");
+				document.body.appendChild(a);
+				a.style = "display: none";
+				return function (blob, key) {
+					var url = window.URL.createObjectURL(blob);
+					a.href = url;
+					a.download = key;
+					a.click();
+					window.URL.revokeObjectURL(url);
+				};
+			}());
+			saveData(blob, key);
+			})					
+		},
+		async downloadBigobj(bucket, key, size){
+			var sliceSize= 1*1024*1024;
+			var slice = Math.ceil(size/sliceSize);
+			var percent = 0;
+			var content = new Uint8Array([]);
+			for(var i=0;i<slice;i++){
+				var start = i*sliceSize;
+				var end = start + sliceSize;
+				if(i == slice-1){
+					end = size-1;
+				}
+				var range = "bytes="+ start + "-" + end;
+				console.log(range);
+				let part = await getObject(bucket, key, range);
+				let buffer = Buffer.from(part);
+				let buff = Buffer.from(content);
+				console.log(buffer);
+				content = Buffer.concat([buff,buffer]);
+				percent = (i+1)/slice*100;
+				console.log(percent);
+			}
+			console.log("content", content);
+			var blob = new Blob([content]);
+			var saveData = (function(blob, key) {
+				var a = document.createElement("a");
+				document.body.appendChild(a);
+				a.style = "display: none";
+				return function (blob, key) {
+					var url = window.URL.createObjectURL(blob);
+					a.href = url;
+					a.download = key;
+					a.click();
+					window.URL.revokeObjectURL(url);
+				};
+			}());
+			saveData(blob, key);
+			content = [];
+		},
+
+		//文件详情
+		handleInfo(scope){
+			this.$data.detaildrawer = true;
+			this.$data.objectName = scope.row.Key;			
+			this.$data.ETag = scope.row.ETag;
+			this.$data.LastModified = scope.row.LastModified;
+			console.log("详情",scope.row.Key);
+		},
+
+		//删除文件
+		handlescope(scope){
+			this.$data.deletevisible = true;
+			this.$data.scope = scope;
+		},
+		async handleDeleteObj(){
+			let scope = this.$data.scope;
+			console.log("删除",scope.row.Key);
+			let bucket = this.$data.bucketName;
+			let key = scope.row.Key;
+			var msg = await deleteObject(bucket, key);
+			this.$data.deletevisible = false;			
+			if(msg){
+				this.$message({
+					showClose: true,
+					message: "删除成功",
+					type: 'success'
+				});
+				this.objects = this.loadObjects(bucket);
+			}else{
+				this.$message({
+					showClose: true,
+					message: "删除失败",
+					type: 'error'
+				});
+			}			
+		},
 
 	},
 	mounted(){		
