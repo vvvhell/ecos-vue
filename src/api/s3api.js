@@ -94,6 +94,58 @@ export async function getObject(bucket, key, range){
 	}
 }
 
+export async function getUploadID(bucket, key){
+	const params = {
+		Bucket: bucket,
+		Key: key,
+	};
+	try {
+		const data = await s3.createMultipartUpload(params).promise();
+		console.log(data);
+		return data.UploadId;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
+
+export async function uploadPart(body, bucket, key, partnumber, uploadID){
+	const params = {
+		Body: body,
+		Bucket: bucket,
+		Key: key,
+		PartNumber: partnumber,
+		UploadId: uploadID
+	};
+	try {
+		const data = await s3.uploadPart(params).promise();
+		console.log(data);
+		return data.ETag;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
+
+export async function completeUpload(bucket, key, uploadID, parts){
+	const params = {
+		Bucket: bucket,
+		Key: key,
+		UploadId: uploadID,
+		MultipartUpload: {
+			Parts: parts
+		},
+	};
+	try {
+		const data = await s3.completeMultipartUpload(params).promise();
+		console.log(data);
+		return data.Location;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
+
 export async function deleteObject(bucket, key){
 	const params = {
 		Bucket: bucket,
@@ -102,7 +154,7 @@ export async function deleteObject(bucket, key){
 	try {
 		const data = await s3.deleteObject(params).promise();
 		console.log(data);
-		return data.DeleteMarker;
+		return data;
 	} catch (e) {
 		console.log(e);
 		return [];

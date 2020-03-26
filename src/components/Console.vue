@@ -59,7 +59,15 @@
 								</el-menu-item>
 
 							</el-menu-item-group>
-						</el-submenu>						
+						</el-submenu>
+						<el-menu-item index="3" v-on:click="openUploadlist">
+							<i class="el-icon-upload2"></i>
+							<span slot="title">上传列表</span>					
+						</el-menu-item>
+						<el-menu-item index="4" v-on:click="openDownloadlist">
+							<i class="el-icon-download"></i>
+							<span slot="title">下载列表</span>					
+						</el-menu-item>												
 					</el-menu>
 				</el-aside>
 
@@ -137,17 +145,33 @@
 												@click="handlescope(scope)">删除</el-button>											
       							</template>
 									</el-table-column>
-									<el-table-column label="下载进度">
-										<template slot-scope="scope" :v-show="progressBar(scope)">
-										<el-progress :percentage='percentage(scope)' :color="customColors" ></el-progress>
+									<el-table-column label="修改时间">
+										<template slot-scope="scope">
+										{{scope.row.LastModified}}
 										</template>
 									</el-table-column>
 								</el-table>
 							</el-card>
 						</el-row>
-
-
 					
+					  <el-card class="uploadlist" v-show="uploadlistvisible" v-for="(upload) in uploadlist" v-bind:key="upload.name">
+							<div>
+								<span><i class="el-icon-document"></i>&nbsp; {{upload.Key}}</span>
+								<div style="margin-top: 10px">
+									<el-progress :stroke-width="8" :percentage="parseFloat((upload.percent1).toFixed(2))" :color="customColors"></el-progress>
+								</div>
+							</div>
+					  </el-card>
+
+						<el-card class="downloadlist" v-show="downloadlistvisible" v-for="(download) in downloadlist" v-bind:key="download.Key">
+							<div>
+								<span><i class="el-icon-document"></i>&nbsp; {{download.Key}}</span>
+								<div style="margin-top: 10px">
+									<el-progress :stroke-width="8" :percentage="parseFloat((download.percent2).toFixed(2))" :color="customColors"></el-progress>
+								</div>
+							</div>							
+					  </el-card>
+
 					</el-main>
           
 					<el-footer>北京大学•深圳研究生院</el-footer>
@@ -215,7 +239,7 @@
 <script type="text/ecmascript-6">
 import { S3 } from 'aws-sdk';
 import '../api/s3api'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject } from '../api/s3api';
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, completeUpload } from '../api/s3api';
 export default {
   data() {
 
@@ -237,6 +261,8 @@ export default {
 			loading1: true,
 			loading2: true,
 			loadingtable: true,
+			uploadlistvisible: false,
+			downloadlistvisible: false,
 
 			bucketName: '',
 			objectName: '',
@@ -247,6 +273,11 @@ export default {
 			objectNum:'',
 			bucketVol:'',
 			scope:[],
+
+			uploadlist:[],
+			downloadlist:[],
+			uploadindex: -1,
+			downloadindex: -1,
 
 			fileList: [],
 
@@ -286,6 +317,8 @@ export default {
 			console.log("概览");
 			this.$data.overviewvisible = true;
 			this.$data.detailvisible = false;
+			this.$data.uploadlistvisible = false;
+			this.$data.downloadlistvisible = false;
 			this.loadAll();
 		},
 		//listBuckets
@@ -338,8 +371,6 @@ export default {
 		//获取Object列表
 		handleJump(bucket){
 			console.log(bucket.Name, "jump");
-			// this.totalVol = 0;
-			// this.fileNum = 0;
 			var param = bucket.Name;
 			this.objects = this.loadObjects(param);	
 			this.$data.bucketName = param;			
@@ -359,6 +390,7 @@ export default {
 				var Vol = 0;
 				for(var i=0; i<this.objectNum; i++){
 					Vol += this.objects[i].Size;
+					this.$set(this.objects[i],'percent2',0);
 				};
 				Vol = Vol/1024/1024
 				this.bucketVol = Vol.toFixed(2);	
@@ -493,6 +525,26 @@ export default {
 			console.log("详情");
 			this.$data.overviewvisible = false;
 			this.$data.detailvisible = true;
+			this.$data.uploadlistvisible = false;
+			this.$data.downloadlistvisible = false;
+		},
+
+		//打开上传列表
+		openUploadlist(){
+			console.log("上传列表");
+			this.$data.overviewvisible = false;
+			this.$data.detailvisible = false;
+			this.$data.uploadlistvisible = true;
+			this.$data.downloadlistvisible = false;
+		},
+
+		//打开下载列表
+		openDownloadlist(){
+			console.log("下载列表");
+			this.$data.overviewvisible = false;
+			this.$data.detailvisible = false;
+			this.$data.uploadlistvisible = false;
+			this.$data.downloadlistvisible = true;
 		},
 
 		//上传文件
@@ -506,35 +558,91 @@ export default {
 			this.fileName = file.raw.name;
 			var name = this.bucketName;
 			var key = this.fileName;
+			var size = this.file.size;
 			var fileReader = new FileReader();
+			var tempobj = {
+				Key: key,
+				percent1: 0
+			}			
 			//载入文件
 			fileReader.readAsArrayBuffer(this.file);
+			this.$notify({
+				title: "温馨提示",
+				message: "开始上传\n"+key,
+				duration: 5000,
+				offset: 50,
+				type: "info"
+			});
 			var that = this;
 			//文件载入成功
 			fileReader.onload = async function(){
 				//读取完成后，数据保存在对象的result属性中
 				console.log(this.result);
 				var blob = new Blob([this.result]);
-				var msg = await putObject(blob, name, key);
-				if(msg !==""){
-					that.$notify({
-						title: "温馨提示",
-						message: key+"\n上传成功",
-						duration: 5000,
-						offset: 50,
-						type: "success"
-					});
+				//小于40MB的文件
+				if(size<40*1024*1024){
+					that.uploadlist.push(tempobj);
+					that.uploadindex += 1;
+					var index = that.uploadindex;
+					var msg = await putObject(blob, name, key);
+					if(msg !==""){
+						that.$notify({
+							title: "温馨提示",
+							message: key+"\n上传成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
+						that.uploadlist[index].percent1 = 100;
+						that.loadObjects(name);
+					}
+				}else{   //大于40MB的文件
+				  that.uploadlist.push(tempobj);
+					var msg = await that.putBigobj(blob, name, key, size);
 					that.loadObjects(name);
-				}else{
-					that.$notify({
-						title: "温馨提示",
-						message: "文件上传失败",
-						duration: 5000,
-						offset: 50,
-						type: "error"
-					});
-				}
+				}				
 			}		
+		},
+		async putBigobj(blob, name, key, size){
+			this.uploadindex += 1;
+			var index = this.uploadindex;
+			var uploadID = await getUploadID(name, key);
+			var sliceSize= 16*1024*1024;
+			var slice = Math.ceil(size/sliceSize);
+			var parts = [];
+			for(var i=0; i<slice ;i++){
+				var partobj = {
+					ETag: "",
+					PartNumber: 1
+				}
+				var start = i*sliceSize;
+				var end = start + sliceSize;
+				if(i == slice-1){
+					end = size-1;
+				}
+				var chunk = blob.slice(start, end);
+				var partnumber = i+1;
+				var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
+				if(msg !== ""){
+					console.log("index", index);
+					this.uploadlist[index].percent1 = (i+1)/slice*100;
+					console.log("percent", this.uploadlist[index]);
+					partobj.ETag = msg;
+					partobj.PartNumber = partnumber;
+					parts.push(partobj);
+				}
+			}
+			console.log(parts);
+			var completemsg = await completeUpload(name, key, uploadID, parts);
+			if(completemsg != ""){
+				this.$notify({
+					title: "温馨提示",
+					message: key+"\n上传成功",
+					duration: 5000,
+					offset: 50,
+					type: "success"
+				});
+			}
 		},
 		beforeUpload(file){
 			this.file = file;
@@ -557,31 +665,31 @@ export default {
 			var bucket = this.$data.bucketName;
 			var key = scope.row.Key;
 			var size = scope.row.Size;
-			var fileSize= 1*1024*1024;
-			if(size>fileSize){
+			var index = 0;
+			for(var i=0;i<this.objects.length;i++){
+				if(this.objects[i].Key == key){
+					index = i;
+					break;
+				}
+			}
+			this.downloadlist.push(this.objects[index]);
+			console.log(this.downloadlist);
+			var baseSize= 1*1024*1024;
+			if(size>baseSize){
 				this.downloadBigobj(bucket, key, size);
 			}else{
 				this.downloadObj(bucket, key);
 			}
 		},
-		progressBar(scope){
-			if(scope.row.isdownloading === true){
-				console.log("true");
-				return true;
-			}else{
-				return false;
-			}
-		},
-		percentage(scope){
-			return scope.row.percentage;
-		},
-		downloadObj(bucket, key){
+		downloadObj(bucket, key, index){
 			function fn3(callback){
 				getObject(bucket, key).then(function(value){
 				callback(value);
 				})
 			};
 			fn3(value =>{
+			this.downloadindex += 1;
+			var index = this.downloadindex;
 			var content = value;
 			var blob = new Blob([content], {type:"stream"})
 			console.log("blob", blob);
@@ -598,12 +706,22 @@ export default {
 				};
 			}());
 			saveData(blob, key);
+			console.log(index);
+			this.downloadlist[index].percent2 = 100;
+			this.$notify({
+				title: "温馨提示",
+				message: key+"\n下载成功",
+				duration: 5000,
+				offset: 50,
+				type: "success"
+			});
 			})					
 		},
 		async downloadBigobj(bucket, key, size){
+			this.downloadindex += 1;
+			var index = this.downloadindex;
 			var sliceSize= 1*1024*1024;
 			var slice = Math.ceil(size/sliceSize);
-			var percent = 0;
 			var content = new Uint8Array([]);
 			for(var i=0;i<slice;i++){
 				var start = i*sliceSize;
@@ -618,8 +736,8 @@ export default {
 				let buff = Buffer.from(content);
 				console.log(buffer);
 				content = Buffer.concat([buff,buffer]);
-				percent = (i+1)/slice*100;
-				console.log(percent);
+				this.downloadlist[index].percent2 = (i+1)/slice*100;
+				console.log(this.downloadlist[index].percent2);
 			}
 			console.log("content", content);
 			var blob = new Blob([content]);
@@ -636,7 +754,13 @@ export default {
 				};
 			}());
 			saveData(blob, key);
-			content = [];
+			this.$notify({
+				title: "温馨提示",
+				message: key+"\n下载成功",
+				duration: 5000,
+				offset: 50,
+				type: "success"
+			});
 		},
 
 		//文件详情
@@ -660,7 +784,7 @@ export default {
 			let key = scope.row.Key;
 			var msg = await deleteObject(bucket, key);
 			this.$data.deletevisible = false;			
-			if(msg){
+			if(msg.err == null){
 				this.$message({
 					showClose: true,
 					message: "删除成功",
@@ -673,6 +797,7 @@ export default {
 					message: "删除失败",
 					type: 'error'
 				});
+				this.objects = this.loadObjects(bucket);
 			}			
 		},
 
@@ -744,6 +869,16 @@ export default {
 		font-size: 30px;
 		padding-top: 15px;
 		height: 40px;
+	}
+	.uploadlist{
+		width: 60%;
+		margin-bottom: 20px;
+		margin-left: 20%;
+	}
+	.downloadlist{
+		width: 60%;
+		margin-bottom: 20px;
+		margin-left: 20%;
 	}
 
   body > .el-container {
