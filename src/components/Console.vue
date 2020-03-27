@@ -674,7 +674,7 @@ export default {
 			}
 			this.downloadlist.push(this.objects[index]);
 			console.log(this.downloadlist);
-			var baseSize= 1*1024*1024;
+			var baseSize= 10*1024*1024;
 			if(size>baseSize){
 				this.downloadBigobj(bucket, key, size);
 			}else{
@@ -720,7 +720,7 @@ export default {
 		async downloadBigobj(bucket, key, size){
 			this.downloadindex += 1;
 			var index = this.downloadindex;
-			var sliceSize= 1*1024*1024;
+			var sliceSize= 10*1024*1024;
 			var slice = Math.ceil(size/sliceSize);
 			var content = new Uint8Array([]);
 			for(var i=0;i<slice;i++){
