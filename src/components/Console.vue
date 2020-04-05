@@ -24,7 +24,7 @@
 						class="el-menu"
 						@open="handleOpen"
 						@close="handleClose"
-						background-color="#a6a5c4"
+						background-color="#99CCFF"
 						text-color="#322A54"
 						active-text-color="#fff">
 						<el-menu-item index="1" v-on:click="openOverview">
@@ -154,23 +154,35 @@
 							</el-card>
 						</el-row>
 					
-					  <el-card class="uploadlist" v-show="uploadlistvisible" v-for="(upload) in uploadlist" v-bind:key="upload.name">
+					  <template v-for="(upload) in uploadlist" >
+						<el-card class="uploadlist" v-show="uploadlistvisible" v-bind:key="upload.name" v-if="upload.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{upload.Key}}</span>
+								<el-button style="margin-left: 15px" type="primary" circle v-if="upload.isPaused" @click="continueUpload(upload)">
+									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting" ></use></svg>
+								</el-button>
+								<el-button style="margin-left: 15px" type="warning" circle v-if="!upload.isPaused" @click="pauseUpload(upload)">
+									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
+								</el-button>
+								<el-button style="float: right" type="danger" icon="el-icon-delete" circle ></el-button>
 								<div style="margin-top: 10px">
 									<el-progress :stroke-width="8" :percentage="parseFloat((upload.percent1).toFixed(2))" :color="customColors"></el-progress>
 								</div>
 							</div>
 					  </el-card>
+					  </template>
 
-						<el-card class="downloadlist" v-show="downloadlistvisible" v-for="(download) in downloadlist" v-bind:key="download.Key">
+						<template v-for="(download) in downloadlist">
+						<el-card class="downloadlist" v-show="downloadlistvisible" v-bind:key="download.Key" v-if="download.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{download.Key}}</span>
+								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelDownload(download)"></el-button>
 								<div style="margin-top: 10px">
 									<el-progress :stroke-width="8" :percentage="parseFloat((download.percent2).toFixed(2))" :color="customColors"></el-progress>
 								</div>
 							</div>							
 					  </el-card>
+						</template>
 
 					</el-main>
           
@@ -239,7 +251,8 @@
 <script type="text/ecmascript-6">
 import { S3 } from 'aws-sdk';
 import '../api/s3api'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, completeUpload } from '../api/s3api';
+import '../assets/iconfont'
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload } from '../api/s3api';
 export default {
   data() {
 
@@ -391,6 +404,7 @@ export default {
 				for(var i=0; i<this.objectNum; i++){
 					Vol += this.objects[i].Size;
 					this.$set(this.objects[i],'percent2',0);
+					this.$set(this.objects[i],'isActive', true);
 				};
 				Vol = Vol/1024/1024
 				this.bucketVol = Vol.toFixed(2);	
@@ -552,6 +566,7 @@ export default {
 			console.log("uploadfile to:", this.bucketName);
 			this.$data.uploadvisible = true;
 		},
+		//选择文件并上传
 		onUploadChange(file){
 			console.log("文件：", file);
 			this.file = file.raw;
@@ -561,9 +576,16 @@ export default {
 			var size = this.file.size;
 			var fileReader = new FileReader();
 			var tempobj = {
+				File: this.file,
+				Bucket: this.bucketName,
 				Key: key,
-				percent1: 0
-			}			
+				Size: size,
+				percent1: 0,
+				UploadID: "",
+				parts: [],
+				isPaused: false,
+				isActive: true
+			};			
 			//载入文件
 			fileReader.readAsArrayBuffer(this.file);
 			this.$notify({
@@ -603,6 +625,7 @@ export default {
 				}				
 			}		
 		},
+		//分片上传大文件
 		async putBigobj(blob, name, key, size){
 			this.uploadindex += 1;
 			var index = this.uploadindex;
@@ -611,38 +634,130 @@ export default {
 			var slice = Math.ceil(size/sliceSize);
 			var parts = [];
 			for(var i=0; i<slice ;i++){
-				var partobj = {
-					ETag: "",
-					PartNumber: 1
-				}
-				var start = i*sliceSize;
-				var end = start + sliceSize;
-				if(i == slice-1){
-					end = size-1;
-				}
-				var chunk = blob.slice(start, end);
-				var partnumber = i+1;
-				var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
-				if(msg !== ""){
-					console.log("index", index);
-					this.uploadlist[index].percent1 = (i+1)/slice*100;
-					console.log("percent", this.uploadlist[index]);
-					partobj.ETag = msg;
-					partobj.PartNumber = partnumber;
-					parts.push(partobj);
-				}
+				if(this.uploadlist[index].isPaused == false){
+					this.uploadlist[index].UploadID = uploadID;
+					var partobj = {
+						ETag: "",
+						PartNumber: 1
+					}
+					var start = i*sliceSize;
+					var end = start + sliceSize;
+					if(i == slice-1){
+						end = size-1;
+					}
+					console.log("range:", start, end);
+					var chunk = blob.slice(start, end);
+					var partnumber = i+1;
+					var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
+					if(msg !== ""){
+						console.log("index", index);
+						this.uploadlist[index].percent1 = (i+1)/slice*100;
+						console.log("percent", this.uploadlist[index]);
+						partobj.ETag = msg;
+						partobj.PartNumber = partnumber;
+						parts.push(partobj);
+						this.uploadlist[index].parts.push(partobj);
+					}
+				}else{
+					break;
+				}					
 			}
-			console.log(parts);
-			var completemsg = await completeUpload(name, key, uploadID, parts);
-			if(completemsg != ""){
-				this.$notify({
-					title: "温馨提示",
-					message: key+"\n上传成功",
-					duration: 5000,
-					offset: 50,
-					type: "success"
-				});
-			}
+			if(this.uploadlist[index].isPaused == false){
+				console.log(parts);
+				var completemsg = await completeUpload(name, key, uploadID, parts);
+				if(completemsg != ""){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n上传成功",
+						duration: 5000,
+						offset: 50,
+						type: "success"
+					});
+				}				
+			}				
+		},
+		//暂停下载
+		pauseUpload(upload){
+			var index = 0;
+			for(var i=0;i<this.uploadlist.length;i++){
+				console.log("i",i);
+				if(this.uploadlist[i].Key == upload.Key){
+					console.log(this.uploadlist[i].Key);
+					index = i;
+					break;
+				}
+			};
+			this.uploadlist[index].isPaused = true;
+		},
+		//继续下载
+		continueUpload(upload){
+			var index = 0;
+			for(var i=0;i<this.uploadlist.length;i++){
+				if(this.uploadlist[i].Key == upload.Key){
+					console.log(this.uploadlist[i].Key);
+					index = i;
+					break;
+				}
+			};
+			this.uploadlist[index].isPaused = false;
+			//重新读取文件
+			var fileReader = new FileReader();
+			fileReader.readAsArrayBuffer(upload.File);
+			var that = this;
+			fileReader.onload = async function(){
+				console.log(this.result);
+				var blob = new Blob([this.result]);
+				var sliceSize= 16*1024*1024;
+				var slice = Math.ceil(upload.File.size/sliceSize);
+				//获取已上传信息
+				var uploaded = await uploadedParts(upload.Bucket, upload.Key, upload.UploadID);
+				var len = uploaded.length;
+				console.log("len: ", len);
+				//继续分片上传
+				for(var i=len; i<slice ;i++){
+					if(that.uploadlist[index].isPaused == false){
+						var partobj = {
+							ETag: "",
+							PartNumber: 1
+						}
+						var start = i*sliceSize;
+						var end = start + sliceSize;
+						if(i == slice-1){
+							end = upload.File.size-1;
+						}
+						console.log("range", start, end);
+						var chunk = blob.slice(start, end);
+						console.log("chunksize: ",chunk.size);
+						var partnumber = i+1;
+						var msg = await uploadPart(chunk, upload.Bucket, upload.Key, partnumber, upload.UploadID);
+						if(msg !== ""){
+							console.log("index", index);
+							that.uploadlist[index].percent1 = (i+1)/slice*100;
+							console.log("percent", that.uploadlist[index]);
+							partobj.ETag = msg;
+							partobj.PartNumber = partnumber;
+							that.uploadlist[index].parts.push(partobj);
+						}
+					}else{
+						break;
+					}					
+				}
+				//完成上传
+				if(that.uploadlist[index].isPaused == false){
+					console.log(upload.parts);
+					var completemsg = await completeUpload(upload.Bucket, upload.Key, upload.UploadID, upload.parts);
+					if(completemsg != ""){
+						that.$notify({
+							title: "温馨提示",
+							message: upload.Key+"\n上传成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
+					}				
+				}				
+				that.loadObjects(upload.Bucket);
+			}		
 		},
 		beforeUpload(file){
 			this.file = file;
@@ -717,6 +832,7 @@ export default {
 			});
 			})					
 		},
+		//分片下载大文件
 		async downloadBigobj(bucket, key, size){
 			this.downloadindex += 1;
 			var index = this.downloadindex;
@@ -724,43 +840,70 @@ export default {
 			var slice = Math.ceil(size/sliceSize);
 			var content = new Uint8Array([]);
 			for(var i=0;i<slice;i++){
-				var start = i*sliceSize;
-				var end = start + sliceSize;
-				if(i == slice-1){
-					end = size-1;
-				}
-				var range = "bytes="+ start + "-" + end;
-				console.log(range);
-				let part = await getObject(bucket, key, range);
-				let buffer = Buffer.from(part);
-				let buff = Buffer.from(content);
-				console.log(buffer);
-				content = Buffer.concat([buff,buffer]);
-				this.downloadlist[index].percent2 = (i+1)/slice*100;
-				console.log(this.downloadlist[index].percent2);
+				if(this.downloadlist[index].isActive == true){
+					var start = i*sliceSize;
+					var end = start + sliceSize;
+					if(i == slice-1){
+						end = size-1;
+					}
+					var range = "bytes="+ start + "-" + end;
+					console.log(range);
+					let part = await getObject(bucket, key, range);
+					console.log("partsize: ",part.length);
+					while(part.length != (end-start+1)){
+						if(this.downloadlist[index].isActive == true){
+							part = await getObject(bucket, key, range);
+						}else{
+							break;
+						}						
+					}
+					let buffer = Buffer.from(part);
+					let buff = Buffer.from(content);
+					console.log(buffer);
+					content = Buffer.concat([buff,buffer]);
+					this.downloadlist[index].percent2 = (i+1)/slice*100;
+					console.log(this.downloadlist[index].percent2);
+				}else{
+					break;
+				}				
 			}
-			console.log("content", content);
-			var blob = new Blob([content]);
-			var saveData = (function(blob, key) {
-				var a = document.createElement("a");
-				document.body.appendChild(a);
-				a.style = "display: none";
-				return function (blob, key) {
-					var url = window.URL.createObjectURL(blob);
-					a.href = url;
-					a.download = key;
-					a.click();
-					window.URL.revokeObjectURL(url);
-				};
-			}());
-			saveData(blob, key);
-			this.$notify({
-				title: "温馨提示",
-				message: key+"\n下载成功",
-				duration: 5000,
-				offset: 50,
-				type: "success"
-			});
+			if(this.downloadlist[index].isActive == true){
+				console.log("content", content);
+				var blob = new Blob([content]);
+				var saveData = (function(blob, key) {
+					var a = document.createElement("a");
+					document.body.appendChild(a);
+					a.style = "display: none";
+					return function (blob, key) {
+						var url = window.URL.createObjectURL(blob);
+						a.href = url;
+						a.download = key;
+						a.click();
+						window.URL.revokeObjectURL(url);
+					};
+				}());
+				saveData(blob, key);
+				this.$notify({
+					title: "温馨提示",
+					message: key+"\n下载成功",
+					duration: 5000,
+					offset: 50,
+					type: "success"
+				});
+			}
+		},
+		//取消下载
+		cancelDownload(download){
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				console.log("i",i);
+				if(this.downloadlist[i].Key == download.Key){
+					console.log(this.downloadlist[i].Key);
+					index = i;
+					break;
+				}
+			};
+			this.downloadlist[index].isActive = false;
 		},
 
 		//文件详情
@@ -811,7 +954,7 @@ export default {
 
 <style>
   .el-header {
-    background-color: #a6a5c4;
+    background-color: rgb(134, 191, 248);
     color: #322A54;
     text-align: left;
 		font-size: xx-large;
@@ -826,7 +969,7 @@ export default {
   }
   
   .el-aside {
-    background-color: #a6a5c4;
+    background-color: #99CCFF;
     color: #322a54;
     text-align: left;
 		padding-top: 50px;
@@ -915,5 +1058,12 @@ export default {
 		text-align: right
 	}
 
+	.icon {
+		width: 1em;
+		height: 1em;
+		vertical-align: -0.15em;
+		fill: currentColor;
+		overflow: hidden;
+	}
   
 </style>

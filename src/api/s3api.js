@@ -127,6 +127,22 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID){
 	}
 }
 
+export async function uploadedParts(bucket, key, uploadID){
+	const params = {
+		Bucket: bucket,
+		Key: key,
+		UploadId: uploadID
+	};
+	try {
+		const data = await s3.listParts(params).promise();
+		console.log(data);
+		return data.Parts;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
+
 export async function completeUpload(bucket, key, uploadID, parts){
 	const params = {
 		Bucket: bucket,
