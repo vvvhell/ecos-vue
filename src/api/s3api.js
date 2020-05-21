@@ -1,14 +1,14 @@
 var AWS = require("aws-sdk");
 AWS.config.update({
 		//accessKeyId:'AKIAX4SGBFHBY7F6646P', secretAccessKey:'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',
-		accessKeyId:"AKIAJZ6MZOEXNN77NAZA", secretAccessKey:"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",
+		accessKeyId:"AKIAJKXM4LPDVOVAXU7A", secretAccessKey:"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",
 		s3ForcePathStyle: true,	
 
 });
 // 连接亚马逊s3
-const ep = new AWS.Endpoint('https://s3.amazonaws.com');
+//const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
-// const ep = new AWS.Endpoint('http://219.223.197.224:8082');
+const ep = new AWS.Endpoint('http://219.223.197.224:8082');
 const s3 = new AWS.S3({endpoint: ep});		
 
 export async function listBuckets(){
@@ -137,6 +137,22 @@ export async function uploadedParts(bucket, key, uploadID){
 		const data = await s3.listParts(params).promise();
 		console.log(data);
 		return data.Parts;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
+
+export async function abortUpload(bucket, key, uploadID){
+	const params = {
+		Bucket: bucket,
+		Key: key,
+		UploadId: uploadID
+	};
+	try {
+		const data = await s3.abortMultipartUpload(params).promise();
+		console.log(data);
+		return data;
 	} catch (e) {
 		console.log(e);
 		return 0;

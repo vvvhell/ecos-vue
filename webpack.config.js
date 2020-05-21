@@ -58,20 +58,13 @@ module.exports = (options = {}) => ({
     host: '127.0.0.1',
     port: 8010,
     proxy: {
-      '/api/': {
-        target: 'http://219.223.195.242:8082',
+      '/api': {
+        target: '',
         changeOrigin: true,
         pathRewrite: {
           '^/api': ''
         }
       },
-      '/amazon/': {
-        target: 'https://s3.amazonaws.com',
-        changeOrigin: true,
-        pathRewrite: {
-          '^/amazon': ''
-        }
-      }
     },
     historyApiFallback: {
       index: url.parse(options.dev ? '/assets/' : publicPath).pathname

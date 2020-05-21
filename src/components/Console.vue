@@ -1,13 +1,14 @@
+
 <template>
-  <div id="console">
-    <el-container style="height:98vh">      
+  <div id="console" style="width:100%">
+    <el-container style="height:100vh">      
 			<el-header style="height:130px">
 				<span>ECOS | 管理控制台</span>
 				<span style="float:right">
 					<el-dropdown @command="handleCommand" trigger=click>
 						<span class="el-dropdown-link" style="color:#302B43">
 							<i class="el-icon-user"></i>
-							username<i class="el-icon-arrow-down el-icon--right"></i>
+							{{$store.state.username}}<i class="el-icon-arrow-down el-icon--right"></i>
 						</span>
 						<el-dropdown-menu slot="dropdown">
 							<el-dropdown-item command="about">关于</el-dropdown-item>
@@ -46,18 +47,10 @@
 											prefix-icon="el-icon-search"
 											:fetch-suggestions="querySearch"
 											@select="handleSelect"></el-autocomplete>
-								</el-menu-item>								
-								<el-menu-item v-for="(bucket) in buckets" v-bind:key="bucket.Name" @click="handleJump(bucket)" v-on:click="openDetail">									
-									<span>• {{bucket.Name}}</span>
-									<el-button
-										class="deleteicon" 
-										size="small" 
-										circle
-										@click="handleDeleteBucket(bucket)">
-										<i class="el-icon-delete" ></i>
-									</el-button>					
+								</el-menu-item>							
+								<el-menu-item class="bucketList" v-for="(bucket) in buckets" v-bind:key="bucket.Name" @click="handleJump(bucket)" v-on:click="openDetail">									
+									<span>• {{bucket.Name}}</span>					
 								</el-menu-item>
-
 							</el-menu-item-group>
 						</el-submenu>
 						<el-menu-item index="3" v-on:click="openUploadlist">
@@ -116,6 +109,7 @@
 						<el-row style="margin-top:25px" v-show="detailvisible">
 							<el-card>
 								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload">上传文件</el-button>
+								<el-button type="danger" icon="el-icon-delete" @click="handleDeleteBucket">删除存储桶</el-button>
 								<el-table
 									v-loading="loadingtable"
 									:data="objects"
@@ -164,7 +158,7 @@
 								<el-button style="margin-left: 15px" type="warning" circle v-if="!upload.isPaused" @click="pauseUpload(upload)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
 								</el-button>
-								<el-button style="float: right" type="danger" icon="el-icon-delete" circle ></el-button>
+								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelUpload(upload)"></el-button>
 								<div style="margin-top: 10px">
 									<el-progress :stroke-width="8" :percentage="parseFloat((upload.percent1).toFixed(2))" :color="customColors"></el-progress>
 								</div>
@@ -252,7 +246,8 @@
 import { S3 } from 'aws-sdk';
 import '../api/s3api'
 import '../assets/iconfont'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload } from '../api/s3api';
+import router from 'vue-router'
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload } from '../api/s3api';
 export default {
   data() {
 
@@ -315,6 +310,7 @@ export default {
 			}
 			else{
 				console.log("logout")
+				this.$router.replace({path:'/LoginPage'})
 			}
 		},
 		//左侧栏列表功能
@@ -510,27 +506,25 @@ export default {
 		},
 
 		//删除bucket
-		handleDeleteBucket(bucket){
-			console.log("delete",bucket.Name);
-			var name = bucket.Name;
-			if(this.objectNum !== 0){
+		handleDeleteBucket(){
+			console.log("delete",this.bucketName, this.objectNum);
+			if(this.objectNum != 0){
 				this.$message({
 							showClose: true,
 							message: 'Bucket内容不为空，删除失败',
 							type: 'error'
 						});
 			}else{
-				deleteBucket(name);
-					this.$notify({
-							title: "温馨提示",
-							message: "Bucket删除成功",
-							duration: 5000,
-							offset: 50,
-							type: "success"
-						});
-			setTimeout(() => {
-						this.loadAll();
-        }, 2000);
+				deleteBucket(this.bucketName);
+				this.$notify({
+						title: "温馨提示",
+						message: "Bucket删除成功",
+						duration: 5000,
+						offset: 50,
+						type: "success"
+					});
+				this.openOverview();
+				this.loadAll();
 			}
 		},
 
@@ -634,7 +628,7 @@ export default {
 			var slice = Math.ceil(size/sliceSize);
 			var parts = [];
 			for(var i=0; i<slice ;i++){
-				if(this.uploadlist[index].isPaused == false){
+				if(this.uploadlist[index].isActive == true && this.uploadlist[index].isPaused == false){
 					this.uploadlist[index].UploadID = uploadID;
 					var partobj = {
 						ETag: "",
@@ -662,7 +656,7 @@ export default {
 					break;
 				}					
 			}
-			if(this.uploadlist[index].isPaused == false){
+			if(this.uploadlist[index].isActive == true && this.uploadlist[index].isPaused == false){
 				console.log(parts);
 				var completemsg = await completeUpload(name, key, uploadID, parts);
 				if(completemsg != ""){
@@ -676,7 +670,7 @@ export default {
 				}				
 			}				
 		},
-		//暂停下载
+		//暂停上传
 		pauseUpload(upload){
 			var index = 0;
 			for(var i=0;i<this.uploadlist.length;i++){
@@ -689,7 +683,7 @@ export default {
 			};
 			this.uploadlist[index].isPaused = true;
 		},
-		//继续下载
+		//继续上传
 		continueUpload(upload){
 			var index = 0;
 			for(var i=0;i<this.uploadlist.length;i++){
@@ -772,6 +766,25 @@ export default {
 				this.$data.uploadvisible = false;
 			}
 			
+		},
+		//取消上传
+		cancelUpload(upload){
+			var index = 0;
+			for(var i=0;i<this.uploadlist.length;i++){
+				console.log("i",i);
+				if(this.uploadlist[i].Key == upload.Key){
+					console.log(this.uploadlist[i].Key);
+					index = i;
+					break;
+				}
+			};
+			this.uploadlist[index].isActive = false;
+			if(this.uploadlist[index].Size >= 40*1024*1024){
+				let bucket = this.uploadlist[index].Bucket;
+				let key = this.uploadlist[index].Key;
+				let uploadID = this.uploadlist[index].UploadID;
+				abortUpload(bucket, key, uploadID);
+			}
 		},
 
 		//下载文件
@@ -953,6 +966,13 @@ export default {
 </script>
 
 <style>
+*{
+	padding: 0;
+	margin: 0;
+}
+  .el-main{
+		padding-bottom: 0;
+	}
   .el-header {
     background-color: rgb(134, 191, 248);
     color: #322A54;
@@ -985,14 +1005,7 @@ export default {
 		line-height: 1px;
 		width: 265px;
 	}
-	.deleteicon{
-		float: right;
-		height:44px;
-		width: 44px;
-		margin-top: 3px;
-	  
-	}
-  
+
   .el-main {
     background-color:#eaedf7;
   }
@@ -1065,5 +1078,6 @@ export default {
 		fill: currentColor;
 		overflow: hidden;
 	}
+
   
 </style>

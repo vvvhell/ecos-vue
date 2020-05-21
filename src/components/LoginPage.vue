@@ -10,7 +10,7 @@
         <img src="../assets/background.jpg" style="height: 81vh" />
       </div>
       <div class="card">
-        <el-card>
+        <el-card class="logincard">
           <div style="font-size:20px">用户登录</div>
           <el-form :model="loginForm" status-icon :rules="rules" ref="loginForm" class="login">
             <el-form-item label="用户名" prop="username">
@@ -118,8 +118,9 @@
 <script>
 
 import { JSEncrypt } from 'jsencrypt/bin/jsencrypt';
-import '../api/login'
-import { getAesKey, encrypt, decrypt, aesEncrypt, aesDecrypt, rsaEncrypt, rsaDecrypt, utf16ToUtf8 } from '../api/login';
+import router from 'vue-router'
+import store from '../store'
+import { transData, rsaDecrypt, aesEncrypt } from '../api/encrypt';
 
 export default {
   data() {
@@ -192,7 +193,6 @@ export default {
       }, 500);
     };
 
-
     return {
       regForm: {
         type:1,
@@ -220,26 +220,16 @@ export default {
       registerForm2Visible: false,
       agreed1: false,
       agreed2: false,
-      painting: {
-        //二维码参数
-        width: 250,
-        height: 250,
-        views: [
-          {
-            type: "qrcode",
-            content: "",
-            background: "#fff",
-            color: "#000",
-            width: 250,
-            height: 250
-          }
-        ]
-      }
+      painting:{}
     };
+  },
+
+  mounted(){
   },
 
   methods: {
 
+    //登录流程
     handleLogin() {
       if (this.isUsernameChecked && this.isPassChecked && this.agreed1) {
         this.$notify({
@@ -249,73 +239,127 @@ export default {
           offset: 50,
           type: "success"
         });
-
         //获取aesKey
         //获取aesKey的请求格式
-        var loginReq = {
+        var getkeyReq = {
           type:202,
           username:''
-        }
-        loginReq.username = this.$data.loginForm.username;
-        var Req = getAesKey(loginReq)
+        };
+        getkeyReq.username = this.$data.loginForm.username;
+        var logReq1 = transData(getkeyReq);
+        //aesEncrypt();
         //发送获取aesKey请求
         this.$axios({
           method:'post',
-          url:'http://222.29.25.20:10286',
-          data:Req
+          url:store.state.cmIp,
+          data:logReq1
         })
         .then((response) =>{
-          console.log("response: ");
-          console.log(response);
+          console.log("response: ", response);
           //解密获取aesKey
           var str = "";
           str = response.data.cmKey;
-          console.log("str", str);
-          let jse = new JSEncrypt();
-          const privateKey = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCUXE1H9n+uRZWxKU0jpRq1blVNyxpx/6lX4GzUErPoLa9sgxF8GU//6xwcqfq+ngFwL51Z07Tt9I8Tm41wSTHBj20f9zOJvWYCodULhAuxwUUeWjnlBCgPUlCJvhIHfV01+sFJBlsogs+BfV9jSYNEphpQLAY/PBuSmObBmGFlzeg0fKCxgTAQMBd0qSO30Co0aOE7TQhjae6OvNFrd6HlHhnhKf6e05wjPyWnb7CtBKDUOGTHimqcp2K8RyN3poiZSsVgYIUoAeLrXKk3bO/8OZd+pyPSiZ/JvOnIoJ6ZZSrUB30fAltaSWYZoytG/rUPX2lO5QRr0AlXmPMbV9WBAgMBAAECggEAAe0s57lQsR+gMPu7T7IuJZr4Kplvj3llZom4gAx6H5KwS3VsPbNKcaVI6Spf4ifFFwLXRTpViB172iJT9NhOeBf3r8mS9r/p2jDlxk+Bo15CGoHLbKjgKErGVvOL4mMDWdcWuW8GsgD41tKc8Xob5UFO6CmaLyoFpaKspGjpItxDjPw6cd0r6fJ5Di3SdgZ9+DizTGzoOWl9H9kDpbhnqkLiyrwjEjXOmAzO7pDWh0QATV2/DE2KjVtbmZKSlI4MIyKAv2lf997lQ7iVtgXJ37vGab+oPRIg2jjAHaJJgkvL49OejJX2LYKKQsMUDZS3Ma6t/S5mk0SNb0ysQSQ/QQKBgQDN7UsUp/YA4f7sdwvE9C3iWj14Kv1Es3pNuP0DBYWK4gX8aUima8XKbvHZ8Y8RxnsFkZd4CQU/MaY/yRI5KVMyS1sianIWtTWShkrjO6INYl7E28YJcQYBxdByAUCgL9wdwlQkbuUjsrl+XrsCUlcp9XV5orYctn40jO5XwuOjaQKBgQC4b5H7UFo3kVjgMMqaEnaptKqAfXLD5F2RZEwkNmZkbIRlLZk0mRHJ7QlQtj9Z+yKN6d8SCAthS7739A6qMUH7ZrY2/bdEQmgZdaj1B6zVgjIEak20Lt2WFrG0uuuIUHmnNCRXuUk1aCxm4x12EZpf9sFsjkjZXlfv6QRi2MEWWQKBgQDKc6Nf8G0TmxvUAInqnSFLKurJ7IHI/CaeqOLeCJys2N+Hsz6Alu4CwiY13Z2JnTevVt6yXTPyV+6ZQSYQWod3p8w2Pq5hks/TeQHA+wyr2e1P3r2I5LxCG+d9XavakJL4EuhEVV4jRX/GNH3on2kgUDipWAVwnx3erjtYvrqsGQKBgDgzNyZ/S55XGd/mvjXInoQD21if4VKzyZc+Gr2GHhlHv+gcxuxyICuJoScJAbDnh5X6x9B0xxL0w9JGehl+PP7gQ3HqSefw3Eu1wLA5kH7W12rlAZyAE2FitO+/bXnyG7/JcbGRci9l+PG5DwclQgcv56yuhqBF0UH3nTCJn/yxAoGBAIDJJtaVBPNCZ4KkIMg/TRdMwEAqJuKVBzYn/xsNNTJlmp9XX9EsNlH590xz8KlqNpLkNJJYsy/Jk4EVEUfV2IovhGkUrIcmLb5UbTCItO2arpHh/6wne9iA5CnmZREyfLUpnueg0V2TKQwmdjGqN9U5RpVE1+H2TPfUJ4j+53Hv"
-          jse.setPrivateKey(privateKey);
-          var a = "";
-          a = jse.decrypt(str);
-          console.log("a", a);
-          // this.$data.aesKey = jiemi;
-          // console.log(this.$data.aesKey);
-            
-
-        }).catch((error) =>{ 
+          console.log("str", str);         
+          //设置二维码中的内容
+          var qrcontent = {
+            CMip:"",
+            AESkey:"",
+            Username:"",
+            Flag:1
+          };
+          qrcontent.Username = this.$data.loginForm.username;
+          var ipstr = store.state.cmIp.slice(7);
+          var iparr = ipstr.split(":");
+          qrcontent.CMip = iparr[0];
+          qrcontent.AESkey = rsaDecrypt(str);
+          this.$data.painting = {
+            //二维码参数
+            width: 250,
+            height: 250,
+            views: [
+              {
+                type: "qrcode",
+                content: "",
+                background: "#fff",
+                color: "#000",
+                width: 250,
+                height: 250
+              }
+            ]
+          }
+          this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+          console.log(this.$data.painting.views[0].content);
+          this.$data.aesKey = qrcontent.AESkey
+        })
+        .then(()=>{
+          var webContent = {
+            type:115,
+            username:this.$data.loginForm.username,
+            password:this.$data.loginForm.pass
+          };
+          var enc = aesEncrypt(webContent, this.$data.aesKey);
+          var loginReq = {
+              type:115,
+              username:'',
+              keyyonghu:''
+          }
+          loginReq.username = this.$data.loginForm.username;
+          loginReq.keyyonghu = enc;
+          var logReq2 = transData(loginReq);
+          this.$axios({
+            method:'post',
+            url:store.state.cmIp,
+            data:logReq2
+          })
+          .then((response) =>{
+            console.log("response",response);
+            //收到CM对登录请求的响应
+            if(true){
+              console.log("test1");
+              var confirm = {
+                type:118,
+                username:this.$data.loginForm.username
+              };
+              var logReq3 = transData(confirm);
+              //轮询接收CM确认信息
+              var Confirm = (()=>{
+                console.log("test2");
+                this.$axios({
+                  method:'post',
+                  url:store.state.cmIp,
+                  data:logReq3
+                })
+                .then((response)=>{
+                  console.log("confirm",response);
+                })
+                //未收到确认信息则递归重新请求
+                .catch((error)=>{
+                  console.log("error",error);
+                  setTimeout(()=>{
+                    Confirm();
+                  },5000)                    
+                })
+              })
+              Confirm();
+            }else{
+              this.$message({
+                showClose:true,
+                message:response.errorMessage,
+                type:'error',
+                duration:3000
+              })
+            }
+          })  
+        })
+        .catch((error) =>{ 
           console.log(error);   
           this.$message({
             showClose:true,
             message:error,
             type:'error',
-            duration:0
+            duration:3000
+          })
         })
-    })
-        //getAesKey(loginReq);
-        //console.log(enc);
-        //this.$data.cmKey = rsaDecrypt(enc);
-        //var encloginForm = aesEncrypt(this.$data.loginForm, this.$data.cmKey)
-
-
-
-        //var text = this.$data.loginForm;
-        //console.log(text);
-        //var a= aesEncrypt(text , '1234567890123456');
-        //console.log(a);
-        //var b= aesDecrypt(a , '1234567890123456');
-        //console.log(b);
-        //this.$data.info = JSON.parse(b);
-        //console.log(this.$data.info);
-        //console.log(this.$data.loginForm)
-        
-        //设置二维码中的内容
-        // var qrcontent = {
-        //   cmIp:"222.29.67.129:10286",
-        //   cmKey:""
-        // };
-        // qrcontent.cmKey = this.$data.aesKey;
-        // this.$data.painting.views[0].content = JSON.stringify(qrcontent);
-        // console.log(this.$data.painting.views[0].content);
-
 
         setTimeout(() => {
           this.loginFormVisible = true;
@@ -330,15 +374,11 @@ export default {
           type: "warning"
         });  
 
-        var str = "jenUGhFePcGAIjGvIvwj/JtYyczYWhvvkIe+Sdsuc9FtlByptxXHgjyHhKXUe3LGQbXBXRXu1yBhvPiSjplcy5ripUL9Nd1DFbbQLAB9YjRyq/WDQlYq8GL6P1G+sbBI0i7xM8YF9VtYylJHSZksdsenFaohGuY7Sm3wHZg22+kT/Dp2gsLTc3aMYmrMW9RZrhfRxI5PsG+BmItxRsi1vtXHjOGcyIDsqoLwZungTSf1NBqBp/vZ6QD3z53DDBIfTC6hNkiZ/xfdxtZs3jNPPnl3BNrA7JnMqt5uZSqWZk6TrYIkD6NHwffBKrAoYG79KPLobxTM6GrtfgyZ2ZaPiw==";
-        var jiemi = rsaDecrypt(str);
-        console.log(jiemi);
-
       }
     },
     handleCompleteLogin() {
       this.loginFormVisible = false;
-      this.$router.push({path:'/Console'});
+      this.$router.replace({path:'/Console/'+store.state.username});
     },
     handleRegUserInfo() {
       if (
@@ -355,9 +395,134 @@ export default {
           offset: 50,
           type: "success"
         });
+        //获取aesKey
+        //获取aesKey的请求格式
+        var getkeyReq = {
+          type:202,
+          username:''
+        };
+        getkeyReq.username = this.$data.regForm.username;
+        var regReq1 = transData(getkeyReq);
+        //aesEncrypt();
+        //发送获取aesKey请求
+        this.$axios({
+          method:'post',
+          url:store.state.cmIp,
+          data:regReq1
+        })
+        .then((response) =>{
+          console.log("response: ", response);
+          //解密获取aesKey
+          var str = "";
+          str = response.data.cmKey;
+          console.log("str", str);         
+          //设置二维码中的内容
+          var qrcontent = {
+            CMip:"",
+            AESkey:"",
+            Username:"",
+            Flag:0
+          };
+          qrcontent.Username = this.$data.regForm.username;
+          var ipstr = store.state.cmIp.slice(7);
+          var iparr = ipstr.split(":");
+          qrcontent.CMip = iparr[0];
+          qrcontent.AESkey = rsaDecrypt(str);
+          this.$data.painting = {
+            //二维码参数
+            width: 250,
+            height: 250,
+            views: [
+              {
+                type: "qrcode",
+                content: "",
+                background: "#fff",
+                color: "#000",
+                width: 250,
+                height: 250
+              }
+            ]
+          }
+          this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+          console.log(this.$data.painting.views[0].content);
+          this.$data.aesKey = qrcontent.AESkey
+        })
+        .then(()=>{
+          var webContent = {
+            type:111,
+            username:this.$data.regForm.username,
+            password:this.$data.regForm.pass,
+            email:this.$data.regForm.email
+          };
+          var enc = aesEncrypt(webContent, this.$data.aesKey);
+          var regReq = {
+              type:111,
+              username:'',
+              keyYongHu:''
+          }
+          regReq.username = this.$data.regForm.username;
+          regReq.keyYongHu = enc;
+          var regReq2 = transData(regReq);
+          this.$axios({
+            method:'post',
+            url:store.state.cmIp,
+            data:regReq2
+          })
+          .then((response) =>{
+            console.log("response",response);
+            //收到CM对注册请求的响应
+            //if(response.linkInfo == regReq.username){
+            if(true){
+              console.log("test1");
+              var confirm = {
+                type:114,
+                username:this.$data.regForm.username
+              };
+              var regReq3 = transData(confirm);
+              //轮询接收CM确认信息
+              var Confirm = (()=>{
+                console.log("test2");
+                this.$axios({
+                  method:'post',
+                  url:store.state.cmIp,
+                  data:regReq3
+                })
+                .then((response)=>{
+                  console.log("confirm",response);
+                })
+                //未收到确认信息则递归重新请求
+                .catch((error)=>{
+                  console.log("error",error);
+                  setTimeout(()=>{
+                    Confirm();
+                  },5000)                    
+                })
+              })
+              Confirm();
+            }else{
+              this.$message({
+                showClose:true,
+                message:response.errorMessage,
+                type:'error',
+                duration:3000
+              })
+            }
+          })        
+        })
+        .catch((error) =>{ 
+          console.log(error);   
+          this.$message({
+            showClose:true,
+            message:error,
+            type:'error',
+            duration:3000
+          })
+        })
+
+
         setTimeout(() => {
           this.registerForm2Visible = true;
-        }, 1000);
+        }, 1000);        
       } else {
         this.$notify({
           title: "温馨提示",
@@ -388,6 +553,10 @@ export default {
 </script>
 
 <style>
+*{
+  padding: 0;
+  margin: 0;
+}
 #app {
   font-family: Helvetica, sans-serif;
   background: radial-gradient(
@@ -403,6 +572,7 @@ export default {
 }
 .background {
   position: absolute;
+  overflow: hidden;
   z-index: 1;
 }
 .card {
@@ -411,10 +581,10 @@ export default {
   padding-left: 60vw;
   z-index: 3;
 }
-.el-main {
+#body {
   padding-bottom: 75vh;
 }
-.el-card {
+.logincard {
   width: 25vw;
 }
 .login {
@@ -438,7 +608,7 @@ canvas.canvas[data-v-39d61408] {
   color: #333;
   text-align: center;
   line-height: 60px;
-  width: 99vw;
+  width: 100%;
   z-index: 2;
 }
 </style>

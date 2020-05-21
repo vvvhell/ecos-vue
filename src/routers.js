@@ -1,16 +1,25 @@
-import LoginPage from './components/LoginPage.vue'
-import Console from './components/Console.vue'
+import store from './store';
+
+const LoginPage = () => import('./components/LoginPage')
+const Console = () => import('./components/Console')
 
 const routers = [
+    {
+        path:'',
+        redirect:'/LoginPage'
+    },
     {
         path:'/LoginPage',
         name:'LoginPage',
         component:LoginPage
     },
     {
-        path:'/Console',
+        path:'/Console/'+store.state.username,
         name:'Console',
-        component:Console
+        component:Console,
+        meta:{
+            requireAuth:true
+        }
     }
 ]
 export default routers;
