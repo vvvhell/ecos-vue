@@ -1,6 +1,6 @@
 import store from './store';
 
-const LoginPage = () => import('./components/LoginPage')
+const LoginPage = () => import('./components/LoginPage-SMS')
 const Console = () => import('./components/Console')
 
 const routers = [

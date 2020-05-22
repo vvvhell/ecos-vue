@@ -117,7 +117,6 @@
 
 <script>
 
-import { JSEncrypt } from 'jsencrypt/bin/jsencrypt';
 import router from 'vue-router'
 import store from '../store'
 import { transData, rsaDecrypt, aesEncrypt } from '../api/encrypt';
@@ -148,9 +147,9 @@ export default {
       if (value === "") {
         this.isPassChecked = false;
         callback(new Error("请输入密码"));
-      } else if ((value.length < 6) | (value.length > 15)) {
+      } else if ((value.length < 8) | (value.length > 15)) {
         this.isPassChecked = false;
-        callback(new Error("密码长度必须为6位-15位"));
+        callback(new Error("密码长度必须为8位-15位"));
       } else {
         if (this.regForm.checkPass !== "") {
           this.$refs.regForm.validateField("checkPass");
