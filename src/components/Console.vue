@@ -170,6 +170,12 @@
 						<el-card class="downloadlist" v-show="downloadlistvisible" v-bind:key="download.Key" v-if="download.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{download.Key}}</span>
+								<el-button style="margin-left: 15px" type="primary" circle v-if="download.isdownloadPaused" @click="continueDownload(download)">
+									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting" ></use></svg>
+								</el-button>
+								<el-button style="margin-left: 15px" type="warning" circle v-if="!download.isdownloadPaused" @click="pauseDownload(download)">
+									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
+								</el-button>
 								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelDownload(download)"></el-button>
 								<div style="margin-top: 10px">
 									<el-progress :stroke-width="8" :percentage="parseFloat((download.percent2).toFixed(2))" :color="customColors"></el-progress>
@@ -190,6 +196,17 @@
 						<span slot="footer" class="dialog-footer">
 							<el-button @click="deletevisible = false">取 消</el-button>
 							<el-button type="primary" @click="handleDeleteObj(scope)">确 定</el-button>
+						</span>
+					</el-dialog>
+
+					<el-dialog
+						title="提示"
+						:visible.sync="deleteallvisible"
+						width="30%">
+						<span>此操作将删除存储桶及其中所有文件，是否继续？</span>
+						<span slot="footer" class="dialog-footer">
+							<el-button @click="deleteallvisible = false">取 消</el-button>
+							<el-button type="primary" @click="deleteAll()">确 定</el-button>
 						</span>
 					</el-dialog>
 
@@ -228,6 +245,7 @@
 							style="text-align:center">
 							<i class="el-icon-upload"></i>
 							<div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+							<div class="el-upload__text">文件名请勿包含空格</div>
 							<div slot="tip" class="el-upload__tip">选择的文件将自动开始上传</div>
 						</el-upload>
 						<div slot="footer" class="dialog-footer">
@@ -247,7 +265,7 @@ import { S3 } from 'aws-sdk';
 import '../api/s3api'
 import '../assets/iconfont'
 import router from 'vue-router'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload } from '../api/s3api';
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads } from '../api/s3api';
 export default {
   data() {
 
@@ -262,6 +280,7 @@ export default {
 			drawer: false,
 			createdrawer: false,
 			detaildrawer: false,
+			deleteallvisible: false,
 			deletevisible: false,
 			overviewvisible: true,
 			detailvisible: false,
@@ -286,6 +305,7 @@ export default {
 			downloadlist:[],
 			uploadindex: -1,
 			downloadindex: -1,
+			downloadtemp:[],
 
 			fileList: [],
 
@@ -310,6 +330,7 @@ export default {
 			}
 			else{
 				console.log("logout")
+				this.$store.dispatch('logoutAct');
 				this.$router.replace({path:'/LoginPage'})
 			}
 		},
@@ -332,6 +353,7 @@ export default {
 		},
 		//listBuckets
 		loadAll(){
+			console.log("loadAll");
 			this.loading1 = true;
 			this.loading2 = true;
 			function fn1(callback){
@@ -342,15 +364,21 @@ export default {
 			fn1(value => {
 				console.log(value);
 				this.buckets = value;
-				this.bucketNum = this.buckets.length;
+				this.bucketNum = this.buckets.length;				
 				this.loading1 = false;
-				for(var i=0;i<this.bucketNum;i++){
-					console.log(this.buckets[i].Name);
+				if(this.bucketNum == 0){
 					this.totalVol = 0;
 					this.fileNum = 0;
-					this.loadObjects2(this.buckets[i].Name);
 					this.loading2 = false;
-				}			
+				}else{
+					for(var i=0;i<this.bucketNum;i++){
+						console.log(this.buckets[i].Name);
+						this.totalVol = 0;
+						this.fileNum = 0;
+						this.loadObjects2(this.buckets[i].Name);
+						this.loading2 = false;
+					}			
+				}
 			})
 			return this.buckets;
 		},		
@@ -399,8 +427,10 @@ export default {
 				var Vol = 0;
 				for(var i=0; i<this.objectNum; i++){
 					Vol += this.objects[i].Size;
+					this.$set(this.objects[i],'Bucket',this.bucketName);
 					this.$set(this.objects[i],'percent2',0);
 					this.$set(this.objects[i],'isActive', true);
+					this.$set(this.objects[i],'isdownloadPaused',false);
 				};
 				Vol = Vol/1024/1024
 				this.bucketVol = Vol.toFixed(2);	
@@ -458,9 +488,9 @@ export default {
 			};
 			fn4(value => {
 				console.log(value);
-				var result1 = "/" + this.newBucketName;
+				var result1 = this.newBucketName;
 				console.log("result1:", result1);
-				if(value === result1){
+				if(value == "OK"){
 					this.$notify({
 						title: "温馨提示",
 						message: "Bucket创建成功",
@@ -506,15 +536,20 @@ export default {
 		},
 
 		//删除bucket
-		handleDeleteBucket(){
+		async handleDeleteBucket(){
 			console.log("delete",this.bucketName, this.objectNum);
+			//object数量不为0
 			if(this.objectNum != 0){
-				this.$message({
-							showClose: true,
-							message: 'Bucket内容不为空，删除失败',
-							type: 'error'
-						});
-			}else{
+				this.deleteAll();
+			}else{		//object数量为0
+				this.deleteUpload();
+			}
+		},
+		//删除未完成上传的分片
+		async deleteUpload(){
+			var list = await listMultipartUploads(this.bucketName);
+			console.log("list",list);
+			if(list.length == 0){
 				deleteBucket(this.bucketName);
 				this.$notify({
 						title: "温馨提示",
@@ -524,8 +559,33 @@ export default {
 						type: "success"
 					});
 				this.openOverview();
-				this.loadAll();
-			}
+			}else{
+				for(var i = 0;i<list.length;i++){
+					let Bucket = this.bucketName;
+					let Key = list[i].Key;
+					let UploadId = list[i].UploadId;
+					var data = await abortUpload(Bucket, Key, UploadId);
+				}
+				deleteBucket(this.bucketName);
+				this.$notify({
+						title: "温馨提示",
+						message: "Bucket删除成功",
+						duration: 5000,
+						offset: 50,
+						type: "success"
+					});
+				this.openOverview();
+			}								
+		},
+		//删除某个bucket及其中所有文件
+		async deleteAll(){
+			//删除文件
+			for(var i=0;i<this.objects.length;i++){
+				var msg = deleteObject(this.bucketName, this.objects[i].Key);
+			}						
+			this.loadObjects(this.bucketName);
+			//删除未完成的分片上传
+			this.deleteUpload();
 		},
 
 		//打开详情页面
@@ -793,6 +853,13 @@ export default {
 			var bucket = this.$data.bucketName;
 			var key = scope.row.Key;
 			var size = scope.row.Size;
+			this.$notify({
+				title: "温馨提示",
+				message: "开始下载\n"+key,
+				duration: 5000,
+				offset: 50,
+				type: "info"
+			});
 			var index = 0;
 			for(var i=0;i<this.objects.length;i++){
 				if(this.objects[i].Key == key){
@@ -816,71 +883,63 @@ export default {
 				})
 			};
 			fn3(value =>{
-			this.downloadindex += 1;
-			var index = this.downloadindex;
-			var content = value;
-			var blob = new Blob([content], {type:"stream"})
-			console.log("blob", blob);
-			var saveData = (function(blob, key) {
-				var a = document.createElement("a");
-				document.body.appendChild(a);
-				a.style = "display: none";
-				return function (blob, key) {
-					var url = window.URL.createObjectURL(blob);
-					a.href = url;
-					a.download = key;
-					a.click();
-					window.URL.revokeObjectURL(url);
-				};
-			}());
-			saveData(blob, key);
-			console.log(index);
-			this.downloadlist[index].percent2 = 100;
-			this.$notify({
-				title: "温馨提示",
-				message: key+"\n下载成功",
-				duration: 5000,
-				offset: 50,
-				type: "success"
-			});
+				this.downloadindex += 1;
+				var index = this.downloadindex;
+				var content = value;
+				var blob = new Blob([content], {type:"stream"})
+				console.log("blob", blob);
+				var saveData = (function(blob, key) {
+					var a = document.createElement("a");
+					document.body.appendChild(a);
+					a.style = "display: none";
+					return function (blob, key) {
+						var url = window.URL.createObjectURL(blob);
+						a.href = url;
+						a.download = key;
+						a.click();
+						window.URL.revokeObjectURL(url);
+					};
+				}());
+				saveData(blob, key);
+				console.log(index);
+				this.downloadlist[index].percent2 = 100;
+				this.$notify({
+					title: "温馨提示",
+					message: key+"\n下载成功",
+					duration: 5000,
+					offset: 50,
+					type: "success"
+				});
 			})					
 		},
 		//分片下载大文件
 		async downloadBigobj(bucket, key, size){
 			this.downloadindex += 1;
 			var index = this.downloadindex;
-			var sliceSize= 10*1024*1024;
+			var sliceSize= 5*1024*1024;
 			var slice = Math.ceil(size/sliceSize);
 			var content = new Uint8Array([]);
-			for(var i=0;i<slice;i++){
-				if(this.downloadlist[index].isActive == true){
+			var range = "";
+			for(var i=0;i<=slice-1;i++){
+				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
 					var start = i*sliceSize;
-					var end = start + sliceSize;
-					if(i == slice-1){
-						end = size-1;
-					}
-					var range = "bytes="+ start + "-" + end;
+					var end = start + sliceSize -1;
+					range = "bytes=" + start + "-" + end;
 					console.log(range);
-					let part = await getObject(bucket, key, range);
-					console.log("partsize: ",part.length);
-					while(part.length != (end-start+1)){
-						if(this.downloadlist[index].isActive == true){
-							part = await getObject(bucket, key, range);
-						}else{
-							break;
-						}						
-					}
+					var part = await getObject(bucket, key, range);
 					let buffer = Buffer.from(part);
 					let buff = Buffer.from(content);
 					console.log(buffer);
 					content = Buffer.concat([buff,buffer]);
 					this.downloadlist[index].percent2 = (i+1)/slice*100;
-					console.log(this.downloadlist[index].percent2);
+					console.log(this.downloadlist[index].percent2);				
+				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+					this.downloadtemp[index]=content;
 				}else{
 					break;
 				}				
 			}
-			if(this.downloadlist[index].isActive == true){
+			if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
 				console.log("content", content);
 				var blob = new Blob([content]);
 				var saveData = (function(blob, key) {
@@ -904,6 +963,81 @@ export default {
 					type: "success"
 				});
 			}
+		},
+		//暂停下载
+		pauseDownload(download){
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				console.log("i",i);
+				if(this.downloadlist[i].Key == download.Key){
+					console.log(this.downloadlist[i].Key);
+					index = i;
+					break;
+				}
+			};
+			this.downloadlist[index].isdownloadPaused = true;
+		},
+		//继续下载
+		async continueDownload(download){
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(this.downloadlist[i].Key == download.Key){
+					console.log(this.downloadlist[i].Key);
+					index = i;
+					break;
+				}
+			};
+			this.downloadlist[index].isdownloadPaused = false;
+			var sliceSize= 5*1024*1024;
+			var slice = Math.ceil(this.downloadlist[index].Size/sliceSize);
+			var content = this.downloadtemp[index];
+			var range = "";
+			var begin = Math.ceil(slice*(this.downloadlist[index].percent2/100));
+			console.log("begin",begin);
+			for(var i=begin;i<=slice-1;i++){
+				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
+					var start = i*sliceSize;
+					var end = start + sliceSize -1;
+					range = "bytes=" + start + "-" + end;
+					console.log(range);
+					var part = await getObject(download.Bucket, download.Key, range);
+					let buffer = Buffer.from(part);
+					let buff = Buffer.from(content);
+					console.log(buffer);
+					content = Buffer.concat([buff,buffer]);
+					this.downloadlist[index].percent2 = (i+1)/slice*100;
+					console.log(this.downloadlist[index].percent2);				
+				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+				this.downloadtemp[index]=content;
+				}else{
+					break;
+				}				
+			}
+			if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
+				console.log("content", content);
+				var blob = new Blob([content]);
+				var saveData = (function(blob, key) {
+					var a = document.createElement("a");
+					document.body.appendChild(a);
+					a.style = "display: none";
+					return function (blob, key) {
+						var url = window.URL.createObjectURL(blob);
+						a.href = url;
+						a.download = key;
+						a.click();
+						window.URL.revokeObjectURL(url);
+					};
+				}());
+				saveData(blob, download.Key);
+				this.downloadtemp[index]=[];
+				this.$notify({
+					title: "温馨提示",
+					message: download.Key+"\n下载成功",
+					duration: 5000,
+					offset: 50,
+					type: "success"
+				});
+			}			
 		},
 		//取消下载
 		cancelDownload(download){
@@ -938,8 +1072,8 @@ export default {
 			console.log("删除",scope.row.Key);
 			let bucket = this.$data.bucketName;
 			let key = scope.row.Key;
+			this.$data.deletevisible = false;
 			var msg = await deleteObject(bucket, key);
-			this.$data.deletevisible = false;			
 			if(msg.err == null){
 				this.$message({
 					showClose: true,

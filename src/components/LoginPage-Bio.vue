@@ -90,7 +90,6 @@
         <br />
         <div slot="footer" class="dialog-footer" style="text-align: center">
           <el-button @click="registerForm2Visible = false">取 消</el-button>
-          <el-button type="primary" @click="handleCompleteReg">完成身份信息采集</el-button>
         </div>
       </div>
     </el-dialog>
@@ -108,7 +107,6 @@
         <br />
         <div slot="footer" class="dialog-footer" style="text-align: center">
           <el-button @click="loginFormVisible = false">取 消</el-button>
-          <el-button type="primary" @click="handleCompleteLogin">完成身份信息验证</el-button>
         </div>
       </div>
     </el-dialog>
@@ -255,41 +253,59 @@ export default {
         })
         .then((response) =>{
           console.log("response: ", response);
-          //解密获取aesKey
-          var str = "";
-          str = response.data.cmKey;
-          console.log("str", str);         
-          //设置二维码中的内容
-          var qrcontent = {
-            CMip:"",
-            AESkey:"",
-            Username:"",
-            Flag:1
-          };
-          qrcontent.Username = this.$data.loginForm.username;
-          var ipstr = store.state.cmIp.slice(7);
-          var iparr = ipstr.split(":");
-          qrcontent.CMip = iparr[0];
-          qrcontent.AESkey = rsaDecrypt(str);
-          this.$data.painting = {
-            //二维码参数
-            width: 250,
-            height: 250,
-            views: [
-              {
-                type: "qrcode",
-                content: "",
-                background: "#fff",
-                color: "#000",
-                width: 250,
-                height: 250
-              }
-            ]
-          }
-          this.$data.painting.views[0].content = JSON.stringify(qrcontent);
-          console.log(this.$data.painting.views[0].content);
-          this.$data.aesKey = qrcontent.AESkey
+          if(response.data.state == "1"){
+            this.$message({
+              showClose:true,
+              message:response.data.errorMessage,
+              type:'error',
+              duration:3000
+            })               
+          }else if(response.data.state == "0"){
+            //解密获取aesKey
+            var str = "";
+            str = response.data.cmKey;
+            console.log("str", str);         
+            //设置二维码中的内容
+            var qrcontent = {
+              CMip:"",
+              AESkey:"",
+              Username:"",
+              Flag:1
+            };
+            qrcontent.Username = this.$data.loginForm.username;
+            var ipstr = store.state.cmIp.slice(7);
+            var iparr = ipstr.split(":");
+            qrcontent.CMip = iparr[0];
+            qrcontent.AESkey = rsaDecrypt(str);
+            this.$data.painting = {
+              //二维码参数
+              width: 250,
+              height: 250,
+              views: [
+                {
+                  type: "qrcode",
+                  content: "",
+                  background: "#fff",
+                  color: "#000",
+                  width: 250,
+                  height: 250
+                }
+              ]
+            }
+            this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+            console.log(this.$data.painting.views[0].content);
+            this.$data.aesKey = qrcontent.AESkey
+          }         
         })
+        .catch((error) =>{
+          this.$message({
+            showClose:true,
+            message:error,
+            type:'error',
+            duration:3000
+          })
+        })
+        //发送登录请求
         .then(()=>{
           var webContent = {
             type:115,
@@ -313,16 +329,29 @@ export default {
           .then((response) =>{
             console.log("response",response);
             //收到CM对登录请求的响应
-            if(true){
-              console.log("test1");
+            if(response.data.state == "1"){
+              this.$message({
+                showClose:true,
+                message:response.data.errorMessage,
+                type:'error',
+                duration:3000
+              })
+              if(response.data.errorMessage=="用户不存在! "){
+                this.$data.loginForm.username = ''
+              }else if(response.data.errorMessage=="密码错误! "){
+                this.$data.loginForm.pass = ''
+              }               
+            }else if(response.data.state == "0"){
+              console.log("轮询");
               var confirm = {
                 type:118,
                 username:this.$data.loginForm.username
               };
               var logReq3 = transData(confirm);
               //轮询接收CM确认信息
+
               var Confirm = (()=>{
-                console.log("test2");
+
                 this.$axios({
                   method:'post',
                   url:store.state.cmIp,
@@ -330,6 +359,7 @@ export default {
                 })
                 .then((response)=>{
                   console.log("confirm",response);
+                  this.handleCompleteLogin(this.$data.loginForm.username)
                 })
                 //未收到确认信息则递归重新请求
                 .catch((error)=>{
@@ -375,9 +405,12 @@ export default {
 
       }
     },
-    handleCompleteLogin() {
+    handleCompleteLogin(data) {
       this.loginFormVisible = false;
-      this.$router.replace({path:'/Console/'+store.state.username});
+      this.$store.dispatch('loginAct',data);
+      console.log(this.$route);
+      this.$router.replace({path:'/Console/'+this.$store.state.username});
+      console.log(this.$route);      
     },
     handleRegUserInfo() {
       if (
@@ -411,41 +444,61 @@ export default {
         })
         .then((response) =>{
           console.log("response: ", response);
-          //解密获取aesKey
-          var str = "";
-          str = response.data.cmKey;
-          console.log("str", str);         
-          //设置二维码中的内容
-          var qrcontent = {
-            CMip:"",
-            AESkey:"",
-            Username:"",
-            Flag:0
-          };
-          qrcontent.Username = this.$data.regForm.username;
-          var ipstr = store.state.cmIp.slice(7);
-          var iparr = ipstr.split(":");
-          qrcontent.CMip = iparr[0];
-          qrcontent.AESkey = rsaDecrypt(str);
-          this.$data.painting = {
-            //二维码参数
-            width: 250,
-            height: 250,
-            views: [
-              {
-                type: "qrcode",
-                content: "",
-                background: "#fff",
-                color: "#000",
-                width: 250,
-                height: 250
-              }
-            ]
+          if(response.data.state == "1"){
+            this.$message({
+              showClose:true,
+              message:response.data.errorMessage,
+              type:'error',
+              duration:3000
+            })               
+          }else if(response.data.state == "0"){
+            //解密获取aesKey
+            var str = "";
+            str = response.data.cmKey;
+            console.log("str", str);         
+            //设置二维码中的内容
+            var qrcontent = {
+              CMip:"",
+              AESkey:"",
+              Username:"",
+              Flag:0
+            };
+            qrcontent.Username = this.$data.regForm.username;
+            var ipstr = store.state.cmIp.slice(7);
+            var iparr = ipstr.split(":");
+            qrcontent.CMip = iparr[0];
+            qrcontent.AESkey = rsaDecrypt(str);
+            this.$data.painting = {
+              //二维码参数
+              width: 250,
+              height: 250,
+              views: [
+                {
+                  type: "qrcode",
+                  content: "",
+                  background: "#fff",
+                  color: "#000",
+                  width: 250,
+                  height: 250
+                }
+              ]
+            }
+            this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+            console.log(this.$data.painting.views[0].content);
+            this.$data.aesKey = qrcontent.AESkey            
           }
-          this.$data.painting.views[0].content = JSON.stringify(qrcontent);
-          console.log(this.$data.painting.views[0].content);
-          this.$data.aesKey = qrcontent.AESkey
+
         })
+        .catch((error) =>{ 
+          console.log(error);   
+          this.$message({
+            showClose:true,
+            message:error,
+            type:'error',
+            duration:3000
+          })
+        })
+        //发送注册请求
         .then(()=>{
           var webContent = {
             type:111,
@@ -470,9 +523,20 @@ export default {
           .then((response) =>{
             console.log("response",response);
             //收到CM对注册请求的响应
-            //if(response.linkInfo == regReq.username){
-            if(true){
-              console.log("test1");
+            if(response.data.state == "1"){
+              this.$message({
+                showClose:true,
+                message:response.data.errorMessage,
+                type:'error',
+                duration:3000
+              });
+              if(response.data.errorMessage == "用户已存在! "){
+                this.$data.regForm.username = "",
+                this.$data.regForm.pass = "",
+                this.$data.regForm.checkPass = ""
+              }   
+            }else{
+              console.log("轮询");
               var confirm = {
                 type:114,
                 username:this.$data.regForm.username
@@ -480,7 +544,6 @@ export default {
               var regReq3 = transData(confirm);
               //轮询接收CM确认信息
               var Confirm = (()=>{
-                console.log("test2");
                 this.$axios({
                   method:'post',
                   url:store.state.cmIp,
@@ -488,6 +551,7 @@ export default {
                 })
                 .then((response)=>{
                   console.log("confirm",response);
+                  this.handleCompleteReg();
                 })
                 //未收到确认信息则递归重新请求
                 .catch((error)=>{
@@ -498,14 +562,16 @@ export default {
                 })
               })
               Confirm();
-            }else{
-              this.$message({
-                showClose:true,
-                message:response.errorMessage,
-                type:'error',
-                duration:3000
-              })
             }
+          })
+          .catch((error) =>{ 
+            console.log(error);   
+            this.$message({
+              showClose:true,
+              message:error,
+              type:'error',
+              duration:3000
+            })
           })        
         })
         .catch((error) =>{ 
@@ -517,7 +583,6 @@ export default {
             duration:3000
           })
         })
-
 
         setTimeout(() => {
           this.registerForm2Visible = true;

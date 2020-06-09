@@ -247,9 +247,11 @@ export default {
             })
             if(response.data.errorMessage=="手机验证码错误，无法登录"){
               this.$data.loginForm.SMScode = ""
+            }else{
+              this.$data.loginForm.mobilenumber = ""
             }   
           }else{
-            this.handleCompleteLogin();
+            this.handleCompleteLogin(this.$data.loginForm.mobilenumber);
           }
         })
         .catch((error) =>{ 
@@ -272,9 +274,12 @@ export default {
       }
     },
     //完成登录
-    handleCompleteLogin() {
+    handleCompleteLogin(data) {
       this.loginFormVisible = false;
-      this.$router.replace({path:'/Console/'+store.state.username});
+      this.$store.dispatch('loginAct',data);
+      console.log(this.$route);
+      this.$router.replace({path:'/Console/'+this.$store.state.username});
+      console.log(this.$route);
     },
     //处理注册流程
     handleRegUserInfo() {

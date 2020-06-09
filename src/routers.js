@@ -1,6 +1,4 @@
-import store from './store';
-
-const LoginPage = () => import('./components/LoginPage-SMS')
+const LoginPage = () => import('./components/LoginPage-Bio')
 const Console = () => import('./components/Console')
 
 const routers = [
@@ -14,7 +12,7 @@ const routers = [
         component:LoginPage
     },
     {
-        path:'/Console/'+store.state.username,
+        path:'/Console/:username',
         name:'Console',
         component:Console,
         meta:{
@@ -22,5 +20,6 @@ const routers = [
         }
     }
 ]
+
 export default routers;
 

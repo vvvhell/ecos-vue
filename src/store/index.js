@@ -7,8 +7,27 @@ Vue.use(Vuex)
 //创建Vuex对象
 const store = new Vuex.Store({
     state:{
-        username:'demo-user',
-        cmIp:'http://222.29.39.6:10286'
+        username:'',
+        cmIp:'http://219.223.193.51:10286',
+        isLogged:false
+    },
+    mutations:{
+        loginaction(state,payload){
+            state.username = payload;
+            state.isLogged = true
+        },
+        logoutaction(state){
+            state.username = '';
+            state.isLogged = false;
+        }
+    },
+    actions:{
+        loginAct(context,payload){
+            context.commit('loginaction',payload)
+        },
+        logoutAct(context){
+            context.commit('logoutaction')
+        }
     }
 })
 

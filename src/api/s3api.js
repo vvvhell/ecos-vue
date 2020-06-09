@@ -1,14 +1,15 @@
 var AWS = require("aws-sdk");
 AWS.config.update({
-		//accessKeyId:'AKIAX4SGBFHBY7F6646P', secretAccessKey:'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',
-		accessKeyId:"AKIAJKXM4LPDVOVAXU7A", secretAccessKey:"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",
-		s3ForcePathStyle: true,	
+
+		accessKeyId:"AKIAX4SGBFHBY7F6646P", secretAccessKey:"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",
+		s3ForcePathStyle: true,
 
 });
 // 连接亚马逊s3
 //const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
-const ep = new AWS.Endpoint('http://219.223.197.224:8082');
+//const ep = new AWS.Endpoint('http://219.223.197.224:8082');
+const ep = new AWS.Endpoint('http://219.223.193.45:8082');
 const s3 = new AWS.S3({endpoint: ep});		
 
 export async function listBuckets(){
@@ -23,7 +24,7 @@ export async function listBuckets(){
 
 export async function listObjects(bucket) {
 	const param = {
-		Bucket: bucket,
+		Bucket: bucket + '/',
 	};	
 	try {
 		const data = await s3.listObjects(param).promise();
@@ -36,29 +37,38 @@ export async function listObjects(bucket) {
 
 export async function createBucket(name){
 	const param = {
-		Bucket: name
+		Bucket: name + '/'
 	};
 	try {
-		const data = await s3.createBucket(param).promise();
-		console.log(data);
-		return data.Location;
+		await s3.createBucket(param).promise();
+		var response = '';
+		function success(callback){
+			var value = s3.createBucket(param).onAsync("httpHeaders",(200));
+			callback(value);
+		};
+		success(value=>{
+			console.log("value",value);
+			response = 'OK'
+		})
+		console.log(response);
+		return response;
 	} catch (e) {
 		console.log(e);
 		return [];
 	}
 }
 
-export function deleteBucket(name){
-	const param = {
-		Bucket: name
+export async function deleteBucket(name){
+	const params = {
+		Bucket: name + '/'
 	};
 	try {
-		const data = s3.deleteBucket(param).promise();
+		const data = await s3.deleteBucket(params).promise();
 		console.log(data);
 		return data.Contents;
 	} catch (e) {
 		console.log(e);
-		return [];
+		return e;
 	}
 }
 
@@ -74,7 +84,7 @@ export async function putObject(data, bucket, key){
 		return data.ETag;
 	} catch (e) {
 		console.log(e);
-		return [];
+		return e;
 	}
 }
 
@@ -86,7 +96,6 @@ export async function getObject(bucket, key, range){
 	};
 	try {
 		const data = await s3.getObject(params).promise();
-		console.log(data);
 		return data.Body;
 	} catch (e) {
 		console.log(e);
@@ -118,12 +127,21 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID){
 		UploadId: uploadID
 	};
 	try {
-		const data = await s3.uploadPart(params).promise();
-		console.log(data);
-		return data.ETag;
+		//ETag暂时不做校验，校验时从响应header中获取ETag字段
+		await s3.uploadPart(params).promise()
+		var response = '';
+		function success(callback){
+			var value = s3.uploadPart(params).on("httpHeaders",(200));
+			callback(value);
+		};
+		success(value=>{
+			console.log("value",value.httpResponse);
+			response = 'OK'
+		})
+		return response;
 	} catch (e) {
 		console.log(e);
-		return 0;
+		return e;
 	}
 }
 
@@ -139,7 +157,7 @@ export async function uploadedParts(bucket, key, uploadID){
 		return data.Parts;
 	} catch (e) {
 		console.log(e);
-		return 0;
+		return e;
 	}
 }
 
@@ -155,7 +173,7 @@ export async function abortUpload(bucket, key, uploadID){
 		return data;
 	} catch (e) {
 		console.log(e);
-		return 0;
+		return e;
 	}
 }
 
@@ -181,7 +199,7 @@ export async function completeUpload(bucket, key, uploadID, parts){
 export async function deleteObject(bucket, key){
 	const params = {
 		Bucket: bucket,
-		Key: key
+		Key: key 
 	};
 	try {
 		const data = await s3.deleteObject(params).promise();
@@ -189,7 +207,23 @@ export async function deleteObject(bucket, key){
 		return data;
 	} catch (e) {
 		console.log(e);
-		return [];
+		return e;
 	}
 }
+
+export async function listMultipartUploads(bucket, key){
+	const params = {
+		Bucket: bucket + '/',
+	};
+	try {
+		const data = await s3.listMultipartUploads(params).promise();
+		console.log(data.Uploads);
+		return data.Uploads;
+	} catch (e) {
+		console.log(e);
+		return e;
+	}
+}
+
+
 
