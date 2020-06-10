@@ -82,7 +82,7 @@
           <el-step title="身份信息采集" icon="el-icon-upload"></el-step>
         </el-steps>
         <br />
-        <vue-canvas-poster id="qrcode" :painting="painting" @success="success" append-to-body></vue-canvas-poster>
+        <vue-canvas-poster id="qrcode" :painting="painting" append-to-body></vue-canvas-poster>
         <div style="padding:175px"></div>
         <div style="text-align: center">请使用手机app扫码</div>
         <br />
