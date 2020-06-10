@@ -1,14 +1,12 @@
 <template>
   <div id="app">
     <div class="title">
-      <span>ECOS | 拟态对象存储</span>
+      <div style="display:inline-block"><span>ECOS | 拟态对象存储</span></div>
+      <el-button type="info" id="config" icon="el-icon-s-tools" @click="configVisible = true">修改配置</el-button>
     </div>
     <el-divider ></el-divider>
 
     <el-main id="body">
-      <div class="background">
-        <img src="../assets/background.jpg" style="height: 81vh" />
-      </div>
       <div class="card">
         <el-card class="logincard">
           <div style="font-size:20px">用户登录</div>
@@ -42,7 +40,7 @@
       </el-container>
     </div>
 
-    <el-dialog title="用户注册" width="28%" :visible.sync="registerFormVisible">
+    <el-dialog title="用户注册" width="600px" :visible.sync="registerFormVisible">
       <div style="height:460px">
         <el-steps :active="1" align-center>
           <el-step title="填写注册信息" icon="el-icon-edit"></el-step>
@@ -77,7 +75,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog title="身份信息采集" width="28%" :visible.sync="registerForm2Visible" append-to-body>
+    <el-dialog title="身份信息采集" width="600px" :visible.sync="registerForm2Visible" append-to-body>
       <div style="height:540px">
         <el-steps :active="2" align-center>
           <el-step title="填写注册信息" icon="el-icon-edit"></el-step>
@@ -94,14 +92,14 @@
       </div>
     </el-dialog>
 
-    <el-dialog title="身份信息验证" width="28%" :visible.sync="loginFormVisible" append-to-body>
+    <el-dialog title="身份信息验证" width="600px" :visible.sync="loginFormVisible" append-to-body>
       <div style="height:540px">
         <el-steps :active="2" align-center>
           <el-step title="填写登录信息" icon="el-icon-edit"></el-step>
           <el-step title="身份信息验证" icon="el-icon-upload"></el-step>
         </el-steps>
         <br />
-        <vue-canvas-poster id="qrcode" :painting="painting" @success="success" append-to-body></vue-canvas-poster>
+        <vue-canvas-poster id="qrcode" :painting="painting" append-to-body></vue-canvas-poster>
         <div style="padding:175px"></div>
         <div style="text-align: center">请使用手机app扫码</div>
         <br />
@@ -109,6 +107,23 @@
           <el-button @click="loginFormVisible = false">取 消</el-button>
         </div>
       </div>
+    </el-dialog>
+
+    <el-dialog title="修改配置信息" width="600px" :visible.sync="configVisible" append-to-body style="padding-top:130px">
+      <el-form :model="configForm" status-icon ref="configForm">
+        <el-form-item label="CM IP" prop="cmIp">
+          <el-input type="text" v-model="configForm.username"></el-input>
+        </el-form-item>
+        <p />
+        <el-form-item label="Interface Server IP" prop="interfaceIp">
+          <el-input type="text" v-model="configForm.interfaceIp"></el-input>
+          </el-form-item>
+          <p />
+      </el-form>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="configVisible = false">取 消</el-button>
+        <el-button type="primary" @click="changeConfig()">确 定</el-button>
+      </span>
     </el-dialog>
   </div>
 </template>
@@ -203,6 +218,10 @@ export default {
         username: "",
         pass: ""
       },
+      configForm: {
+        cmIp:"",
+        interfaceIp:""
+      },
       
       rules: {
         username: [{ validator: checkUsername, trigger: "blur" }],
@@ -215,6 +234,7 @@ export default {
       loginFormVisible: false,
       registerFormVisible: false,
       registerForm2Visible: false,
+      configVisible: false,
       agreed1: false,
       agreed2: false,
       painting:{}
@@ -405,6 +425,7 @@ export default {
 
       }
     },
+    //完成登录
     handleCompleteLogin(data) {
       this.loginFormVisible = false;
       this.$store.dispatch('loginAct',data);
@@ -412,6 +433,7 @@ export default {
       this.$router.replace({path:'/Console/'+this.$store.state.username});
       console.log(this.$route);      
     },
+    //注册流程
     handleRegUserInfo() {
       if (
         this.isUsernameChecked &&
@@ -597,6 +619,7 @@ export default {
         });
       }
     },
+    //提交注册
     handleCompleteReg() {
       this.registerFormVisible = false;
       this.registerForm2Visible = false;
@@ -608,9 +631,15 @@ export default {
         type: "success"
       });
     },
-    success() {
-      console.log("generate qrcode success");
-    },
+    //修改配置
+    changeConfig(){
+      if(this.configForm.cmIp != ""){
+        this.$store.dispatch('changecmIp',this.configForm.cmIp);
+      }
+      if(this.configForm.interfaceIp != ""){
+        this.$store.dispatch('changeinterfaceIp',this.configForm.interfaceIp);
+      }
+    }
 
   }
 };
@@ -630,9 +659,14 @@ export default {
   );
 }
 .title {
+  position: relative;
   font-size: xx-large;
   padding-top: 40px;
   padding-left: 120px;
+}
+#config {
+  position:absolute;
+  right:50px
 }
 .background {
   position: absolute;
@@ -642,14 +676,16 @@ export default {
 .card {
   position: absolute;
   padding-top: 10vh;
-  padding-left: 60vw;
+  margin-left: 36%;
   z-index: 3;
 }
 #body {
-  padding-bottom: 75vh;
+  background:url("../assets/background.jpg");
+  background-size: cover;
+  height: 80vh;
 }
 .logincard {
-  width: 25vw;
+  width: 500px;
 }
 .login {
   text-align: left;

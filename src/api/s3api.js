@@ -1,3 +1,5 @@
+import store from '../store/index'
+
 var AWS = require("aws-sdk");
 AWS.config.update({
 
@@ -8,8 +10,7 @@ AWS.config.update({
 // 连接亚马逊s3
 //const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
-//const ep = new AWS.Endpoint('http://219.223.197.224:8082');
-const ep = new AWS.Endpoint('http://219.223.193.45:8082');
+const ep = new AWS.Endpoint(store.state.interfaceIp);
 const s3 = new AWS.S3({endpoint: ep});		
 
 export async function listBuckets(){
