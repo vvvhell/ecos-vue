@@ -87,7 +87,7 @@
         <div style="text-align: center">请使用手机app扫码</div>
         <br />
         <div slot="footer" class="dialog-footer" style="text-align: center">
-          <el-button @click="registerForm2Visible = false">取 消</el-button>
+          <el-button @click="returnReg()">取 消</el-button>
         </div>
       </div>
     </el-dialog>
@@ -104,7 +104,7 @@
         <div style="text-align: center">请使用手机app扫码</div>
         <br />
         <div slot="footer" class="dialog-footer" style="text-align: center">
-          <el-button @click="loginFormVisible = false">取 消</el-button>
+          <el-button @click="returnLog()">取 消</el-button>
         </div>
       </div>
     </el-dialog>
@@ -112,7 +112,7 @@
     <el-dialog title="修改配置信息" width="600px" :visible.sync="configVisible" append-to-body style="padding-top:130px">
       <el-form :model="configForm" status-icon ref="configForm">
         <el-form-item label="CM IP" prop="cmIp">
-          <el-input type="text" v-model="configForm.username"></el-input>
+          <el-input type="text" v-model="configForm.cmIp"></el-input>
         </el-form-item>
         <p />
         <el-form-item label="Interface Server IP" prop="interfaceIp">
@@ -237,7 +237,9 @@ export default {
       configVisible: false,
       agreed1: false,
       agreed2: false,
-      painting:{}
+      painting:{},
+      regPoll: false,
+      logPoll: false,
     };
   },
 
@@ -285,36 +287,7 @@ export default {
             var str = "";
             str = response.data.cmKey;
             console.log("str", str);         
-            //设置二维码中的内容
-            var qrcontent = {
-              CMip:"",
-              AESkey:"",
-              Username:"",
-              Flag:1
-            };
-            qrcontent.Username = this.$data.loginForm.username;
-            var ipstr = store.state.cmIp.slice(7);
-            var iparr = ipstr.split(":");
-            qrcontent.CMip = iparr[0];
-            qrcontent.AESkey = rsaDecrypt(str);
-            this.$data.painting = {
-              //二维码参数
-              width: 250,
-              height: 250,
-              views: [
-                {
-                  type: "qrcode",
-                  content: "",
-                  background: "#fff",
-                  color: "#000",
-                  width: 250,
-                  height: 250
-                }
-              ]
-            }
-            this.$data.painting.views[0].content = JSON.stringify(qrcontent);
-            console.log(this.$data.painting.views[0].content);
-            this.$data.aesKey = qrcontent.AESkey
+            this.$data.aesKey = rsaDecrypt(str)
           }         
         })
         .catch((error) =>{
@@ -362,16 +335,44 @@ export default {
                 this.$data.loginForm.pass = ''
               }               
             }else if(response.data.state == "0"){
+              //设置二维码中的内容
+              var qrcontent = {
+                CMip:"",
+                AESkey:"",
+                Username:"",
+                Flag:1
+              };
+              qrcontent.Username = this.$data.loginForm.username;
+              var ipstr = store.state.cmIp.slice(7);
+              var iparr = ipstr.split(":");
+              qrcontent.CMip = iparr[0];
+              qrcontent.AESkey = this.$data.aesKey;
+              this.$data.painting = {
+                //二维码参数
+                width: 250,
+                height: 250,
+                views: [
+                  {
+                    type: "qrcode",
+                    content: "",
+                    background: "#fff",
+                    color: "#000",
+                    width: 250,
+                    height: 250
+                  }
+                ]
+              }
+              this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+              console.log(this.$data.painting.views[0].content);
               console.log("轮询");
+              this.logPoll = true;
               var confirm = {
                 type:118,
                 username:this.$data.loginForm.username
               };
               var logReq3 = transData(confirm);
               //轮询接收CM确认信息
-
               var Confirm = (()=>{
-
                 this.$axios({
                   method:'post',
                   url:store.state.cmIp,
@@ -384,9 +385,11 @@ export default {
                 //未收到确认信息则递归重新请求
                 .catch((error)=>{
                   console.log("error",error);
-                  setTimeout(()=>{
-                    Confirm();
-                  },5000)                    
+                  if(this.logPoll == true){
+                    setTimeout(()=>{
+                      Confirm();
+                    },5000)    
+                  }                                 
                 })
               })
               Confirm();
@@ -425,6 +428,11 @@ export default {
 
       }
     },
+    //返回登录界面
+    returnLog(){
+      this.loginFormVisible = false;
+      this.logPoll = false;
+    },
     //完成登录
     handleCompleteLogin(data) {
       this.loginFormVisible = false;
@@ -444,7 +452,7 @@ export default {
       ) {
         this.$notify({
           title: "温馨提示",
-          message: "提交成功，请扫码采集身份信息！",
+          message: "正在提交，请扫码采集身份信息！",
           duration: 5000,
           offset: 50,
           type: "success"
@@ -478,36 +486,8 @@ export default {
             var str = "";
             str = response.data.cmKey;
             console.log("str", str);         
-            //设置二维码中的内容
-            var qrcontent = {
-              CMip:"",
-              AESkey:"",
-              Username:"",
-              Flag:0
-            };
-            qrcontent.Username = this.$data.regForm.username;
-            var ipstr = store.state.cmIp.slice(7);
-            var iparr = ipstr.split(":");
-            qrcontent.CMip = iparr[0];
-            qrcontent.AESkey = rsaDecrypt(str);
-            this.$data.painting = {
-              //二维码参数
-              width: 250,
-              height: 250,
-              views: [
-                {
-                  type: "qrcode",
-                  content: "",
-                  background: "#fff",
-                  color: "#000",
-                  width: 250,
-                  height: 250
-                }
-              ]
-            }
-            this.$data.painting.views[0].content = JSON.stringify(qrcontent);
-            console.log(this.$data.painting.views[0].content);
-            this.$data.aesKey = qrcontent.AESkey            
+
+            this.$data.aesKey = rsaDecrypt(str)            
           }
 
         })
@@ -558,7 +538,37 @@ export default {
                 this.$data.regForm.checkPass = ""
               }   
             }else{
+              //设置二维码中的内容
+              var qrcontent = {
+                CMip:"",
+                AESkey:"",
+                Username:"",
+                Flag:0
+              };
+              qrcontent.Username = this.$data.regForm.username;
+              var ipstr = store.state.cmIp.slice(7);
+              var iparr = ipstr.split(":");
+              qrcontent.CMip = iparr[0];
+              qrcontent.AESkey = this.$data.aesKey;
+              this.$data.painting = {
+                //二维码参数
+                width: 250,
+                height: 250,
+                views: [
+                  {
+                    type: "qrcode",
+                    content: "",
+                    background: "#fff",
+                    color: "#000",
+                    width: 250,
+                    height: 250
+                  }
+                ]
+              }
+              this.$data.painting.views[0].content = JSON.stringify(qrcontent);
+              console.log(this.$data.painting.views[0].content);
               console.log("轮询");
+              this.regPoll = true;
               var confirm = {
                 type:114,
                 username:this.$data.regForm.username
@@ -578,9 +588,11 @@ export default {
                 //未收到确认信息则递归重新请求
                 .catch((error)=>{
                   console.log("error",error);
-                  setTimeout(()=>{
-                    Confirm();
-                  },5000)                    
+                  if(this.regPoll == true){
+                    setTimeout(()=>{
+                      Confirm();
+                    },5000)  
+                  }                                    
                 })
               })
               Confirm();
@@ -619,6 +631,11 @@ export default {
         });
       }
     },
+    //返回注册界面
+    returnReg(){
+      this.registerForm2Visible = false;
+      this.regPoll = false;
+    },
     //提交注册
     handleCompleteReg() {
       this.registerFormVisible = false;
@@ -639,6 +656,8 @@ export default {
       if(this.configForm.interfaceIp != ""){
         this.$store.dispatch('changeinterfaceIp',this.configForm.interfaceIp);
       }
+      this.configVisible = false;
+      console.log(this.configForm);
     }
 
   }

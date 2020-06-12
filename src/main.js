@@ -22,17 +22,17 @@ const router = new VueRouter({
   mode:'history',
   routes:routers
 })
-router.beforeEach((to, from, next) =>{
-  if(to.path === '/LoginPage'){
-    next();
-  }else{
-    if(to.meta.requireAuth && !store.state.isLogged){
-      next({path:'/LoginPage'})      
-    }else{
-      next()
-    }
-  }
-})
+// router.beforeEach((to, from, next) =>{
+//   if(to.path === '/LoginPage'){
+//     next();
+//   }else{
+//     if(to.meta.requireAuth && !store.state.isLogged){
+//       next({path:'/LoginPage'})      
+//     }else{
+//       next()
+//     }
+//   }
+// })
 
 new Vue({
   el: '#app',

@@ -169,6 +169,7 @@ export async function abortUpload(bucket, key, uploadID){
 		UploadId: uploadID
 	};
 	try {
+		console.log(params.Bucket);
 		const data = await s3.abortMultipartUpload(params).promise();
 		console.log(data);
 		return data;

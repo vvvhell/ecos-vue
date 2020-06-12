@@ -8,7 +8,7 @@ Vue.use(Vuex)
 const store = new Vuex.Store({
     state:{
         username:'',
-        cmIp:'http://219.223.193.51:10286',
+        cmIp:'http://219.223.196.196:10286',
         interfaceIp:'http://219.223.193.45:8082',
         isLogged:false
     },
