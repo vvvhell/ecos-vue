@@ -882,7 +882,6 @@ export default {
 		async cancelUpload(upload){
 			var index = 0;
 			for(var i=0;i<this.uploadlist.length;i++){
-				console.log("i",i);
 				if(this.uploadlist[i].Key == upload.Key){
 					console.log(this.uploadlist[i].Key);
 					index = i;
@@ -891,9 +890,10 @@ export default {
 			};
 			this.uploadlist[index].isActive = false;
 			if(this.uploadlist[index].Size >= 40*1024*1024){
-				let bucket = this.uploadlist[index].name;
+				let bucket = this.uploadlist[index].Bucket;
 				let key = this.uploadlist[index].key;
 				let uploadID = this.uploadlist[index].UploadID;
+				console.log(bucket,key,UploadID);
 				await abortUpload(bucket, key, uploadID);				
 				this.uploadlist.splice(index,1);
 			}else{
