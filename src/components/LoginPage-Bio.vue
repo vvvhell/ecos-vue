@@ -244,6 +244,23 @@ export default {
   },
 
   mounted(){
+    function getCookie(cname){
+      var name = cname + "=";
+      var ca = document.cookie.split(';');
+      for(var i=0; i<ca.length; i++) {
+        var c = ca[i].trim();
+        if (c.indexOf(name)==0) return c.substring(name.length,c.length);
+      }
+      return "";
+    }
+    var cmIp = "cmIp";
+    var interfaceIp = "interfaceIp";
+    if(getCookie(cmIp) != ""){
+      this.$store.dispatch('changecmIp', getCookie(cmIp));
+    };
+    if(getCookie(interfaceIp) != ""){
+      this.$store.dispatch('changeinterfaceIp',getCookie(interfaceIp));
+    }
   },
 
   methods: {
@@ -251,13 +268,6 @@ export default {
     //登录流程
     handleLogin() {
       if (this.isUsernameChecked && this.isPassChecked && this.agreed1) {
-        this.$notify({
-          title: "温馨提示",
-          message: "请扫码验证身份信息！",
-          duration: 5000,
-          offset: 50,
-          type: "success"
-        });
         //获取aesKey
         //获取aesKey的请求格式
         var getkeyReq = {
@@ -322,7 +332,7 @@ export default {
           .then((response) =>{
             console.log("response",response);
             //收到CM对登录请求的响应
-            if(response.data.state == "1"){
+            if(response.data.state === "1"){
               this.$message({
                 showClose:true,
                 message:response.data.errorMessage,
@@ -330,11 +340,22 @@ export default {
                 duration:3000
               })
               if(response.data.errorMessage=="用户不存在! "){
-                this.$data.loginForm.username = ''
+                this.$data.loginForm.username = '';
+                return;
               }else if(response.data.errorMessage=="密码错误! "){
-                this.$data.loginForm.pass = ''
-              }               
-            }else if(response.data.state == "0"){
+                this.$data.loginForm.pass = '';
+                return;
+              }
+              return;               
+            }else if(response.data.state === "0"){
+              this.loginFormVisible = true;
+              this.$notify({
+                title: "温馨提示",
+                message: "请扫码验证身份信息！",
+                duration: 5000,
+                offset: 50,
+                type: "success"
+              });
               //设置二维码中的内容
               var qrcontent = {
                 CMip:"",
@@ -365,34 +386,14 @@ export default {
               this.$data.painting.views[0].content = JSON.stringify(qrcontent);
               console.log(this.$data.painting.views[0].content);
               console.log("轮询");
-              this.logPoll = true;
+              this.$data.logPoll = true;
               var confirm = {
                 type:118,
                 username:this.$data.loginForm.username
               };
               var logReq3 = transData(confirm);
-              //轮询接收CM确认信息
-              var Confirm = (()=>{
-                this.$axios({
-                  method:'post',
-                  url:store.state.cmIp,
-                  data:logReq3
-                })
-                .then((response)=>{
-                  console.log("confirm",response);
-                  this.handleCompleteLogin(this.$data.loginForm.username)
-                })
-                //未收到确认信息则递归重新请求
-                .catch((error)=>{
-                  console.log("error",error);
-                  if(this.logPoll == true){
-                    setTimeout(()=>{
-                      Confirm();
-                    },5000)    
-                  }                                 
-                })
-              })
-              Confirm();
+              //轮询接收CM确认信息              
+              this.Confirm(this.$data.logPoll, logReq3);
             }else{
               this.$message({
                 showClose:true,
@@ -413,10 +414,6 @@ export default {
           })
         })
 
-        setTimeout(() => {
-          this.loginFormVisible = true;
-        }, 1000);
-
       } else {
         this.$notify({
           title: "温馨提示",
@@ -427,6 +424,43 @@ export default {
         });  
 
       }
+    },
+    //轮询登录信息
+    Confirm(data, logReq3){
+      if(data == true){
+        this.$axios({
+          method:'post',
+          url:store.state.cmIp,
+          data:logReq3
+        })
+        .then((response)=>{
+          console.log("轮询结果",response.data);
+          if(response.data.state == "0"){
+            console.log("confirm",response);
+            this.handleCompleteLogin(this.$data.loginForm.username)
+          }else if(response.data.state == "1"){
+            this.returnLog();
+            this.$message({
+              showClose:true,
+              message:response.data.errorMessage,
+              type:'error',
+              duration:3000
+            })
+          }                 
+        })
+        //未收到确认信息则递归重新请求
+        .catch((error)=>{
+          console.log("error",error);
+          if(this.logPoll == true){
+            setTimeout(()=>{
+              this.Confirm(this.logPoll, logReq3);
+            },5000)    
+          }                                 
+        })
+      }else{
+        return;
+      }
+
     },
     //返回登录界面
     returnLog(){
@@ -450,13 +484,6 @@ export default {
         this.isEmailChecked &&
         this.agreed2
       ) {
-        this.$notify({
-          title: "温馨提示",
-          message: "正在提交，请扫码采集身份信息！",
-          duration: 5000,
-          offset: 50,
-          type: "success"
-        });
         //获取aesKey
         //获取aesKey的请求格式
         var getkeyReq = {
@@ -538,6 +565,14 @@ export default {
                 this.$data.regForm.checkPass = ""
               }   
             }else{
+              this.$notify({
+                title: "温馨提示",
+                message: "正在提交，请扫码采集身份信息！",
+                duration: 5000,
+                offset: 50,
+                type: "success"
+              });
+              this.registerForm2Visible = true;
               //设置二维码中的内容
               var qrcontent = {
                 CMip:"",
@@ -618,9 +653,6 @@ export default {
           })
         })
 
-        setTimeout(() => {
-          this.registerForm2Visible = true;
-        }, 1000);        
       } else {
         this.$notify({
           title: "温馨提示",
@@ -650,16 +682,24 @@ export default {
     },
     //修改配置
     changeConfig(){
+      function setCookie(name,value){ 
+        var Days = 30; 
+        var exp = new Date(); 
+        exp.setTime(exp.getTime() + Days*24*60*60*1000); 
+        document.cookie = name + "="+ escape (value) + ";expires=" + exp.toGMTString();
+        console.log(name,value); 
+      }; 
       if(this.configForm.cmIp != ""){
         this.$store.dispatch('changecmIp',this.configForm.cmIp);
+        document.cookie="cmIp="+this.configForm.cmIp;
       }
       if(this.configForm.interfaceIp != ""){
         this.$store.dispatch('changeinterfaceIp',this.configForm.interfaceIp);
+        document.cookie="interfaceIp="+this.configForm.interfaceIp;
       }
       this.configVisible = false;
       console.log(this.configForm);
     }
-
   }
 };
 </script>
@@ -714,7 +754,7 @@ export default {
 canvas.canvas[data-v-39d61408] {
   position: absolute;
   top: 32%;
-  left: 25%;
+  left: 30%;
 }
 .el-button,
 .el-input__inner,

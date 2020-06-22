@@ -76,7 +76,7 @@
 										<div class="subview">{{bucketNum}} 个</div>
 										</el-card></el-col>
 									<el-col :span="7"><el-card v-loading="loading2">全部Bucket已用空间
-										<div class="subview">{{(totalVol).toFixed(2)}} MB</div>
+										<div class="subview">{{showVol}} {{unit1}}</div>
 										</el-card></el-col>
 									<el-col :span="7"><el-card v-loading="loading2">全部Bucket文件数
 										<div class="subview">{{fileNum}} 个</div>
@@ -98,7 +98,7 @@
 								<el-divider></el-divider>
 								<el-row :gutter="30">									
 									<el-col :span="7"><el-card v-loading="loadingtable">已使用的存储空间
-										<div class="subview1">{{bucketVol}} MB</div>
+										<div class="subview1">{{bucketVol}} {{unit2}}</div>
 										</el-card></el-col>
 									<el-col :span="7"><el-card v-loading="loadingtable">已存储的文件数量
 										<div class="subview1">{{objectNum}} 个</div>
@@ -120,7 +120,7 @@
 									</el-table-column>
 									<el-table-column label="文件大小" width="250">
 										<template slot-scope="scope">
-											{{(scope.row.Size/1024).toFixed(2)}}&nbsp; KB											
+											{{(scope.row.Size/1024/1024).toFixed(2)}}&nbsp; MB											
 										</template>	
 									</el-table-column>
 									<el-table-column label="操作" width="350">
@@ -155,7 +155,7 @@
 								<el-button style="margin-left: 15px" type="primary" circle v-if="upload.isPaused && upload.percent1!=100" @click="continueUpload(upload)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting" ></use></svg>
 								</el-button>
-								<el-button style="margin-left: 15px" type="warning" circle v-if="!upload.isPaused && upload.percent1!=100" @click="pauseUpload(upload)">
+								<el-button style="margin-left: 15px" type="warning" circle v-if="!upload.isPaused && upload.percent!=100" @click="pauseUpload(upload)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
 								</el-button>
 								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelUpload(upload)"></el-button>
@@ -173,7 +173,7 @@
 								<el-button style="margin-left: 15px" type="primary" circle v-if="download.isdownloadPaused && download.percent2!=100" @click="continueDownload(download)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting" ></use></svg>
 								</el-button>
-								<el-button style="margin-left: 15px" type="warning" circle v-if="!download.isdownloadPaused && download.percent2!=100" @click="pauseDownload(download)">
+								<el-button style="margin-left: 15px" type="warning" circle v-if="!download.isdownloadPaused && download.percent!=100" @click="pauseDownload(download)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
 								</el-button>
 								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelDownload(download)"></el-button>
@@ -220,6 +220,15 @@
 						<div style="width:90%">
 							<el-input placeholder="请输入创建的Bucket名称" v-model='newBucketName' :clearable="true"></el-input>
 						</div>
+						<div class="drawer-title">权限控制</div>
+						<el-select v-model="BucketAcl" placeholder="请选择" style="width:90%">
+							<el-option
+								v-for="item in options"
+								:key="item.value"
+								:label="item.label"
+								:value="item.value">
+							</el-option>
+						</el-select>
 						<div class="drawer-body">
 							<el-button @click="handleCancel">取 消</el-button><el-button type="primary" @click="handleCreate">创 建</el-button>
 						</div>
@@ -238,7 +247,7 @@
 							drag
 							action="doUpload" 
 							multiple
-							:file-list="fileList"
+							:show-file-list="false"
 							:before-upload="beforeUpload"
 							:auto-upload="false"
 							:on-change="onUploadChange"
@@ -248,6 +257,16 @@
 							<div class="el-upload__text">文件名请勿包含空格</div>
 							<div slot="tip" class="el-upload__tip">选择的文件将自动开始上传</div>
 						</el-upload>
+						<div class="drawer-title" style="text-align:center"><div style="margin-bottom:20px">权限控制</div>
+							<el-select v-model="BucketAcl" placeholder="请选择" style="width:40%">
+							<el-option
+								v-for="item in options"
+								:key="item.value"
+								:label="item.label"
+								:value="item.value">
+							</el-option>
+						</el-select>	
+						</div>					
 						<div slot="footer" class="dialog-footer">
 							<el-button @click="uploadvisible = false">取 消</el-button>
 							<el-button type="primary" @click="submitUpload">确 定</el-button>
@@ -274,6 +293,8 @@ export default {
 			state:'',
 			bucketNum: '',
 			totalVol: 0,
+			showVol: 0,
+			unit1: 'B',
 			fileNum: 0,
 			newBucketName:"",
 
@@ -299,6 +320,7 @@ export default {
 			objects:[],
 			objectNum:'',
 			bucketVol:'',
+			unit2:'B',
 			scope:[],
 
 			uploadlist:[],
@@ -307,7 +329,21 @@ export default {
 			downloadnum:[],
 			downloadtemp:[],
 
-			fileList: [],
+			options:[
+				{
+					value:'私有',
+					label:'私有'
+				},
+				{
+					value:'公有',
+					label:'所有用户读'
+				},
+				{
+					value:'公有读写',
+					label:'所有用户读写'
+				},
+			],
+			BucketAcl:'',
 
 			customColors: [
 				{color: '#f56c6c', percentage: 20},
@@ -398,10 +434,26 @@ export default {
 				for(var i=0; i<this.objectNum; i++){
 					Vol += this.objects[i].Size;
 				};
-				Vol = Vol/1024/1024;
 				this.totalVol += Vol;
 				this.fileNum += this.objectNum;
-			})
+				if(this.totalVol<1024){
+					this.showVol = this.totalVol.toFixed(2);
+					this.unit1 = "B";
+				}
+				if(1024<=this.totalVol<1024*1024){
+					this.showVol = (this.totalVol/1024).toFixed(2);
+					this.unit1 = "KB";
+				}
+				if(1024*1024<=this.totalVol<1024*1024*1024){
+					this.showVol = (this.totalVol/1024/1024).toFixed(2);
+					console.log(this.totalVol);
+					this.unit1 = "MB";
+				}
+				if(this.totalVol>=1024*1024*1024){
+					this.showVol = (this.totalVol/1024/1024/1024).toFixed(2);
+					this.unit1 = "GB";
+				}
+			})				
 			return param;						
 		},
 		
@@ -429,8 +481,23 @@ export default {
 					Vol += this.objects[i].Size;
 					this.$set(this.objects[i],'Bucket',this.bucketName);
 				};
-				Vol = Vol/1024/1024
-				this.bucketVol = Vol.toFixed(2);	
+				if(Vol<1024){
+					this.bucketVol = Vol.toFixed(2);
+					this.unit2 = 'B'
+				}
+				if(Vol>=1024){
+					this.bucketVol = (Vol/1024).toFixed(2);
+					this.unit2 = "KB"	
+				}
+				if(Vol>=1024*1024){
+					this.bucketVol = (Vol/1024/1024).toFixed(2);
+					this.unit2 = "MB"
+				}
+				if(Vol>=1024*1024*1024){
+					this.bucketVol = (Vol/1024/1024/1024).toFixed(2);
+					this.unit2 = "GB"
+				}
+	
 				this.loadingtable = false;
 			})
 			return this.objects;
@@ -443,7 +510,6 @@ export default {
 		},
 		handleCreate() {
 			if(this.$data.newBucketName !== ""){
-				console.log("1");
 				var existed = 0;
 				var i = 0;
 				for(i=0;i<this.$data.bucketNum;i++){
@@ -467,7 +533,6 @@ export default {
 				}
 			}
 			else{
-				console.log("5");
 				this.$notify({
 							title: "温馨提示",
 							message: "Bucket名称为空",
@@ -486,7 +551,6 @@ export default {
 			fn4(value => {
 				console.log(value);
 				var result1 = this.newBucketName;
-				console.log("result1:", result1);
 				if(value == "OK"){
 					this.$notify({
 						title: "温馨提示",
@@ -665,8 +729,8 @@ export default {
 				//读取完成后，数据保存在对象的result属性中
 				console.log(this.result);
 				var blob = new Blob([this.result]);
-				//小于40MB的文件
-				if(size<40*1024*1024){
+				//小于15MB的文件
+				if(size<15*1024*1024){
 					var msg = await putObject(blob, name, key);
 					if(msg !==""){
 						that.$notify({
@@ -686,7 +750,7 @@ export default {
 						that.uploadlist[index].percent1 = 100;
 						that.loadObjects(name);
 					}
-				}else{   //大于40MB的文件
+				}else{   //大于15MB的文件
 					var msg = await that.putBigobj(blob, name, key, size, tempobj.Key);
 					that.loadObjects(name);
 				}				
@@ -695,7 +759,7 @@ export default {
 		//分片上传大文件
 		async putBigobj(blob, name, key, size, Key){
 			var uploadID = await getUploadID(name, key);
-			var sliceSize= 16*1024*1024;
+			var sliceSize= 15*1024*1024;
 			var slice = Math.ceil(size/sliceSize);
 			var parts = [];
 			for(var i=0; i<slice ;i++){
@@ -773,6 +837,7 @@ export default {
 				}
 			};
 			this.uploadlist[index].isPaused = true;
+			//s3.uploadPart(upload.).abort();
 		},
 		//继续上传
 		continueUpload(upload){
@@ -792,7 +857,7 @@ export default {
 			fileReader.onload = async function(){
 				console.log(this.result);
 				var blob = new Blob([this.result]);
-				var sliceSize= 16*1024*1024;
+				var sliceSize= 15*1024*1024;
 				var slice = Math.ceil(upload.File.size/sliceSize);
 				//获取已上传信息
 				var uploaded = await uploadedParts(upload.Bucket, upload.key, upload.UploadID);
@@ -889,7 +954,7 @@ export default {
 				}
 			};
 			this.uploadlist[index].isActive = false;
-			if(this.uploadlist[index].Size >= 40*1024*1024){
+			if(this.uploadlist[index].Size >= 15*1024*1024){
 				let bucket = this.uploadlist[index].Bucket;
 				let key = this.uploadlist[index].key;
 				let uploadID = this.uploadlist[index].UploadID;
@@ -1023,7 +1088,7 @@ export default {
 		},
 		//分片下载大文件
 		async downloadBigobj(bucket, size, name){
-			var sliceSize= 5*1024*1024;
+			var sliceSize= 10*1024*1024;
 			var slice = Math.ceil(size/sliceSize);
 			var content = new Uint8Array([]);
 			var range = "";
@@ -1142,7 +1207,7 @@ export default {
 				}
 			}
 			this.downloadlist[index].isdownloadPaused = false;
-			var sliceSize= 5*1024*1024;
+			var sliceSize= 10*1024*1024;
 			var slice = Math.ceil(this.downloadlist[index].Size/sliceSize);
 			//获取缓存的index
 			var index1 = 0;
