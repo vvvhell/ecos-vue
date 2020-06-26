@@ -3,15 +3,54 @@ import store from '../store/index'
 var AWS = require("aws-sdk");
 AWS.config.update({
 
-		accessKeyId:"AKIAX4SGBFHBY7F6646P", secretAccessKey:"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",
+		accessKeyId:'d18f4b611f2f71296e532eb30521c67e',
+		secretAccessKey:'c285c6d63b13c0843e8d337e0c591177',
 		s3ForcePathStyle: true,
+		signatureVersion:'v4',
+		region:'us-east-1'
 
 });
 // 连接亚马逊s3
 //const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
 const ep = new AWS.Endpoint(store.state.interfaceIp);
-const s3 = new AWS.S3({endpoint: ep});		
+const s3 = new AWS.S3({endpoint: ep});
+const iam = new AWS.IAM({endpoint: ep});
+
+export function ConfigKey(AccessKeyId,SecretAccessKey){
+	AWS.config.update({
+		accessKeyId:AccessKeyId,
+		secretAccessKey:SecretAccessKey
+	})
+}
+
+export async function createUser(name){
+	const params = {
+		UserName:name,
+	}
+	try {
+		const data = await iam.createUser(params).promise();
+		console.log(data);
+		return data;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
+
+export async function createKey(name){
+	const params = {
+		UserName:name,
+	}
+	try {
+		const data = await iam.createAccessKey(params).promise();
+		console.log(data);
+		return data;
+	} catch (e) {
+		console.log(e);
+		return 0;
+	}
+}
 
 export async function listBuckets(){
 	try {
@@ -19,7 +58,7 @@ export async function listBuckets(){
 		return data.Buckets;
 	} catch (e) {
 		console.log(e);
-		return [];
+		return 0;
 	}
 }
 
@@ -85,7 +124,7 @@ export async function putObject(data, bucket, key){
 		return data.ETag;
 	} catch (e) {
 		console.log(e);
-		return e;
+		return 0;
 	}
 }
 
@@ -98,9 +137,24 @@ export async function getObject(bucket, key, range){
 	try {
 		const data = await s3.getObject(params).promise();
 		return data.Body;
+	} catch (error) {
+		console.log(error);
+		return 0;
+	}
+}
+//暂停后取消未下载完成的分片
+export function abortDownload(bucket, key, range){
+	const params = {
+		Bucket: bucket,
+		Key: key,
+		Range: range,
+	};
+	try {
+		s3.getObject(params).abort();
+		console.log('abort',params.Range);
 	} catch (e) {
 		console.log(e);
-		return 0;
+		return e;
 	}
 }
 
@@ -142,7 +196,7 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID){
 		return response;
 	} catch (e) {
 		console.log(e);
-		return e;
+		return 0;
 	}
 }
 
@@ -158,7 +212,7 @@ export async function uploadedParts(bucket, key, uploadID){
 		return data.Parts;
 	} catch (e) {
 		console.log(e);
-		return e;
+		return 0;
 	}
 }
 

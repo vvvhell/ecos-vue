@@ -133,6 +133,7 @@
 import router from 'vue-router'
 import store from '../store'
 import { transData, rsaDecrypt, aesEncrypt } from '../api/encrypt';
+import {createUser} from '../api/s3api'
 
 export default {
   data() {
@@ -619,6 +620,7 @@ export default {
                 .then((response)=>{
                   console.log("confirm",response);
                   this.handleCompleteReg();
+
                 })
                 //未收到确认信息则递归重新请求
                 .catch((error)=>{
@@ -669,19 +671,30 @@ export default {
       this.regPoll = false;
     },
     //提交注册
-    handleCompleteReg() {
+    async handleCompleteReg() {
       this.registerFormVisible = false;
       this.registerForm2Visible = false;
-      this.$notify({
-        title: "温馨提示",
-        message: "注册成功！",
-        duration: 5000,
-        offset: 50,
-        type: "success"
-      });
+      var data = await createUser(this.regForm.username);
+      if(data != 0){
+        this.$notify({
+          title: "温馨提示",
+          message: "注册成功！",
+          duration: 5000,
+          offset: 50,
+          type: "success"
+        });
+      }else{
+        this.$notify({
+          title: "温馨提示",
+          message: " 创建用户失败！",
+          duration: 5000,
+          offset: 50,
+          type: "error"
+        });
+      }
     },
     //修改配置
-    changeConfig(){
+    changeConfig() {
       function setCookie(name,value){ 
         var Days = 30; 
         var exp = new Date(); 
@@ -698,7 +711,6 @@ export default {
         document.cookie="interfaceIp="+this.configForm.interfaceIp;
       }
       this.configVisible = false;
-      console.log(this.configForm);
     }
   }
 };

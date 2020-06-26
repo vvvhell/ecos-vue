@@ -284,7 +284,8 @@ import { S3 } from 'aws-sdk';
 import '../api/s3api'
 import '../assets/iconfont'
 import router from 'vue-router'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads } from '../api/s3api';
+import {throttle} from 'lodash'
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, abortDownload, createUser, createKey, ConfigKey } from '../api/s3api';
 export default {
   data() {
 
@@ -336,11 +337,11 @@ export default {
 				},
 				{
 					value:'公有',
-					label:'所有用户读'
+					label:'允许所有用户读取'
 				},
 				{
 					value:'公有读写',
-					label:'所有用户读写'
+					label:'允许所有用户读取和写入'
 				},
 			],
 			BucketAcl:'',
@@ -446,7 +447,6 @@ export default {
 				}
 				if(1024*1024<=this.totalVol<1024*1024*1024){
 					this.showVol = (this.totalVol/1024/1024).toFixed(2);
-					console.log(this.totalVol);
 					this.unit1 = "MB";
 				}
 				if(this.totalVol>=1024*1024*1024){
@@ -702,6 +702,34 @@ export default {
 				isPaused: false,
 				isActive: true
 			};
+			for(var i=0;i<this.uploadlist.length;i++){
+				if(tempobj.Bucket == this.uploadlist[i].Bucket && tempobj.key == this.uploadlist[i].key){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n已在上传列表中，请勿重复上传",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					return;
+				}else{
+					continue;
+				}
+			}
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(tempobj.Bucket == this.downloadlist[i].Bucket && tempobj.key == this.downloadlist[i].Key){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n正在下载中，请勿上传同名文件",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					return;
+				}else{
+					continue;
+				}
+			}
 			if(this.uploadlist.length>0){
 				var num = 0;
 				for(var i=0;i<this.uploadlist.length;i++){
@@ -732,7 +760,7 @@ export default {
 				//小于15MB的文件
 				if(size<15*1024*1024){
 					var msg = await putObject(blob, name, key);
-					if(msg !==""){
+					if(msg != 0){
 						that.$notify({
 							title: "温馨提示",
 							message: key+"\n上传成功",
@@ -749,6 +777,22 @@ export default {
 						}
 						that.uploadlist[index].percent1 = 100;
 						that.loadObjects(name);
+					}else{
+						that.$notify({
+							title: "温馨提示",
+							message: key+"\n上传失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						var index = 0;
+						for(var i=0;i<that.uploadlist.length;i++){
+							if(that.uploadlist[i].Key == tempobj.Key){
+								index = i;
+								break;
+							}
+						}
+						that.cancelUpload(that.uploadlist[index]);
 					}
 				}else{   //大于15MB的文件
 					var msg = await that.putBigobj(blob, name, key, size, tempobj.Key);
@@ -759,71 +803,120 @@ export default {
 		//分片上传大文件
 		async putBigobj(blob, name, key, size, Key){
 			var uploadID = await getUploadID(name, key);
-			var sliceSize= 15*1024*1024;
-			var slice = Math.ceil(size/sliceSize);
-			var parts = [];
-			for(var i=0; i<slice ;i++){
+			if(uploadID == 0){
+				this.$notify({
+					title: "温馨提示",
+					message: key+"\n上传失败",
+					duration: 5000,
+					offset: 50,
+					type: "error"
+				});
 				var index = 0;
+					for(var i=0;i<this.uploadlist.length;i++){
+						if(this.uploadlist[i].Key == tempobj.Key){
+							index = i;
+							break;
+						}
+					}
+					this.cancelUpload(this.uploadlist[index]);
+				return;
+			}else{
+				var sliceSize= 15*1024*1024;
+				var slice = Math.ceil(size/sliceSize);
+				var parts = [];
+				for(var i=0; i<slice ;i++){
+					var index = 0;
+					for(var j=0;j<this.uploadlist.length;j++){
+						if(this.uploadlist[j].Key == Key){
+							index = j;
+							break;
+						}
+					}
+					if(this.uploadlist[index].isActive == true && this.uploadlist[index].isPaused == false){
+						this.uploadlist[index].UploadID = uploadID;
+						var partobj = {
+							ETag: "",
+							PartNumber: 1
+						}
+						var start = i*sliceSize;
+						var end = start + sliceSize;
+						if(i == slice-1){
+							end = size-1;
+						}
+						console.log("range:", start, end);
+						var chunk = blob.slice(start, end);
+						var partnumber = i+1;
+						var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
+						if(msg != 0){
+							var index1 = 0;
+							for(var k=0;k<this.uploadlist.length;k++){
+								if(this.uploadlist[k].Key == Key){
+									index1 = k;
+									break;
+								}
+							}
+							this.uploadlist[index1].percent1 = (i+1)/slice*100;
+							console.log("percent", this.uploadlist[index1]);
+							partobj.ETag = msg;
+							partobj.PartNumber = partnumber;
+							parts.push(partobj);
+							this.uploadlist[index1].parts.push(partobj);
+						}else{
+							this.$notify({
+								title: "温馨提示",
+								message: key+"\n上传失败",
+								duration: 5000,
+								offset: 50,
+								type: "error"
+							});
+							var index1 = 0;
+							for(var k=0;k<this.uploadlist.length;k++){
+								if(this.uploadlist[k].Key == Key){
+									index1 = k;
+									break;
+								}
+							};
+							this.cancelUpload(this.uploadlist[index1]);
+							return;
+						}
+					}else{
+						break;
+					}					
+				}
+				var index2 = 0;
 				for(var j=0;j<this.uploadlist.length;j++){
 					if(this.uploadlist[j].Key == Key){
-						index = j;
+						index2 = j;
 						break;
 					}
 				}
-				if(this.uploadlist[index].isActive == true && this.uploadlist[index].isPaused == false){
-					this.uploadlist[index].UploadID = uploadID;
-					var partobj = {
-						ETag: "",
-						PartNumber: 1
+				if(this.uploadlist[index2].isActive == true && this.uploadlist[index2].isPaused == false){
+					console.log(parts);
+					if(parts.length == slice){
+						var completemsg = await completeUpload(name, key, uploadID, parts);
+						if(completemsg != 0){
+							this.$notify({
+								title: "温馨提示",
+								message: key+"\n上传成功",
+								duration: 5000,
+								offset: 50,
+								type: "success"
+							});
+						}				
+					}else{
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n上传失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						this.cancelUpload(this.uploadlist[index2]);
 					}
-					var start = i*sliceSize;
-					var end = start + sliceSize;
-					if(i == slice-1){
-						end = size-1;
-					}
-					console.log("range:", start, end);
-					var chunk = blob.slice(start, end);
-					var partnumber = i+1;
-					var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
-					if(msg !== ""){
-						var index1 = 0;
-						for(var k=0;k<this.uploadlist.length;k++){
-							if(this.uploadlist[k].Key == Key){
-								index1 = k;
-								break;
-							}
-						}
-						this.uploadlist[index1].percent1 = (i+1)/slice*100;
-						console.log("percent", this.uploadlist[index1]);
-						partobj.ETag = msg;
-						partobj.PartNumber = partnumber;
-						parts.push(partobj);
-						this.uploadlist[index1].parts.push(partobj);
-					}
-				}else{
-					break;
-				}					
-			}
-			var index2 = 0;
-			for(var j=0;j<this.uploadlist.length;j++){
-				if(this.uploadlist[j].Key == Key){
-					index2 = j;
-					break;
-				}
-			}
-			if(this.uploadlist[index2].isActive == true && this.uploadlist[index2].isPaused == false){
-				console.log(parts);
-				var completemsg = await completeUpload(name, key, uploadID, parts);
-				if(completemsg != ""){
-					this.$notify({
-						title: "温馨提示",
-						message: key+"\n上传成功",
-						duration: 5000,
-						offset: 50,
-						type: "success"
-					});
+					
 				}				
-			}				
+			}
+			
 		},
 		//暂停上传
 		pauseUpload(upload){
@@ -887,7 +980,7 @@ export default {
 						console.log("chunksize: ",chunk.size);
 						var partnumber = i+1;
 						var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
-						if(msg !== ""){
+						if(msg != 0){
 							var index2 = 0;
 							for(var j=0;j<that.uploadlist.length;j++){
 								if(that.uploadlist[j].Key == upload.Key){
@@ -902,7 +995,15 @@ export default {
 							that.uploadlist[index2].parts.push(partobj);
 						}
 					}else{
-						break;
+						that.$notify({
+							title: "温馨提示",
+							message: upload.key+"\n上传失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						that.cancelUpload(upload);
+						return;
 					}					
 				}
 				//完成上传
@@ -915,20 +1016,44 @@ export default {
 				}
 				if(that.uploadlist[index3].isActive == true && that.uploadlist[index3].isPaused == false){
 					console.log(upload.parts);
-					var completemsg = await completeUpload(upload.Bucket, upload.key, upload.UploadID, upload.parts);
-					if(completemsg != ""){
+					if(upload.parts.length == slice){
+						var completemsg = await completeUpload(upload.Bucket, upload.key, upload.UploadID, upload.parts);
+						if(completemsg != 0){
+							that.$notify({
+								title: "温馨提示",
+								message: upload.key+"\n上传成功",
+								duration: 5000,
+								offset: 50,
+								type: "success"
+							});
+						}else{
+							that.$notify({
+								title: "温馨提示",
+								message: upload.key+"\n上传失败",
+								duration: 5000,
+								offset: 50,
+								type: "error"
+							});
+							that.cancelUpload(upload);
+							return;
+						}				
+					}else{
 						that.$notify({
 							title: "温馨提示",
-							message: upload.key+"\n上传成功",
+							message: upload.key+"\n上传失败",
 							duration: 5000,
 							offset: 50,
-							type: "success"
+							type: "error"
 						});
-					}				
+						that.cancelUpload(upload);
+						return;
+					}
+
 				}				
 				that.loadObjects(upload.Bucket);
 			}		
 		},
+
 		beforeUpload(file){
 			this.file = file;
 			this.fileName = file.name;			
@@ -973,13 +1098,6 @@ export default {
 			this.loadObjects(bucket);		//防止下载列表名称变化，原理未解决
 			var key = scope.row.Key;
 			var size = scope.row.Size;
-			this.$notify({
-				title: "温馨提示",
-				message: "开始下载\n"+key,
-				duration: 5000,
-				offset: 50,
-				type: "info"
-			});
 			//重复下载计数表
 			if(this.downloadnum.length==0){
 				var a ={
@@ -1017,9 +1135,31 @@ export default {
 				}
 			}
 			var renameobj = this.objects[index];
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.key == this.downloadlist[i].Key){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n已在下载列表中，请勿重复下载",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					return;
+				}else{
+					continue;
+				}
+			};
+			this.$notify({
+				title: "温馨提示",
+				message: "开始下载\n"+key,
+				duration: 5000,
+				offset: 50,
+				type: "info"
+			});
 			this.$set(renameobj,'isActive',true);
 			this.$set(renameobj,'percent2',0);
 			this.$set(renameobj,'isdownloadPaused',false);
+			this.$set(renameobj,'start',0)
 			var num = this.downloadnum[index2].num -1;
 			console.log('num',num);
 			if(num>0){
@@ -1054,36 +1194,56 @@ export default {
 			};
 			fn3(value =>{
 				var content = value;
-				var blob = new Blob([content], {type:"stream"})
-				console.log("blob", blob);
-				var saveData = (function(blob, key) {
-					var a = document.createElement("a");
-					document.body.appendChild(a);
-					a.style = "display: none";
-					return function (blob, key) {
-						var url = window.URL.createObjectURL(blob);
-						a.href = url;
-						a.download = key;
-						a.click();
-						window.URL.revokeObjectURL(url);
-					};
-				}());
-				saveData(blob, key);
-				var index1 = 0;
-				for(var i=0;i<this.downloadlist.length;i++){
-					if(this.downloadlist[i].name == name){
-						index1 = i;
-						break;
+				if(value == 0){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n下载失败",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					var index0 = 0;
+					for(var i=0;i<this.downloadlist.length;i++){
+						if(this.downloadlist[i].name == name){
+							index0 = i;
+							break;
+						}
+					}
+					this.cancelDownload(this.downloadlist[index0]);
+				}else{
+					var blob = new Blob([content], {type:"stream"})
+					console.log("blob", blob);
+					var saveData = (function(blob, key) {
+						var a = document.createElement("a");
+						document.body.appendChild(a);
+						a.style = "display: none";
+						return function (blob, key) {
+							var url = window.URL.createObjectURL(blob);
+							a.href = url;
+							a.download = key;
+							a.click();
+							window.URL.revokeObjectURL(url);
+						};
+					}());				
+					var index1 = 0;
+					for(var i=0;i<this.downloadlist.length;i++){
+						if(this.downloadlist[i].name == name){
+							index1 = i;
+							break;
+						}
+					}
+					if(this.downloadlist[index1].isActive == true){
+						saveData(blob, key);
+						this.downloadlist[index1].percent2 = 100;
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n下载成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
 					}
 				}
-				this.downloadlist[index1].percent2 = 100;
-				this.$notify({
-					title: "温馨提示",
-					message: key+"\n下载成功",
-					duration: 5000,
-					offset: 50,
-					type: "success"
-				});
 			})					
 		},
 		//分片下载大文件
@@ -1105,22 +1265,35 @@ export default {
 				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
 					var start = i*sliceSize;
 					var end = start + sliceSize -1;
+					this.downloadlist[index].start = i*sliceSize;
 					range = "bytes=" + start + "-" + end;
 					var part = await getObject(bucket, key, range);
-					let buffer = Buffer.from(part);
-					let buff = Buffer.from(content);
-					content = Buffer.concat([buff,buffer]);
-					//异步操作后重新获取下载内容的index
-					var index2 = 0;
-					for(var k=0;k<this.downloadlist.length;k++){
-						if(this.downloadlist[k].name == name){
-							index2 = k;
-							key = this.downloadlist[k].Key
-							break;
+					if(part == 0){
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n下载失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						this.cancelDownload(this.downloadlist[index]);
+						break;
+					}else{
+						let buffer = Buffer.from(part);
+						let buff = Buffer.from(content);
+						content = Buffer.concat([buff,buffer]);
+						//异步操作后重新获取下载内容的index
+						var index2 = 0;
+						for(var k=0;k<this.downloadlist.length;k++){
+							if(this.downloadlist[k].name == name){
+								index2 = k;
+								key = this.downloadlist[k].Key
+								break;
+							}
 						}
-					}
-					this.downloadlist[index2].percent2 = (i+1)/slice*100;
-					console.log(this.downloadlist[index2].percent2);				
+						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						console.log(this.downloadlist[index2].percent2);				
+					}					
 				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
 					if(this.downloadtemp.length==0){
 						var temp ={
@@ -1195,6 +1368,8 @@ export default {
 					break;
 				}
 			}
+			var range = "bytes=" + download.start + "-" + (download.start+10*1024*1024-1);
+			abortDownload(download.Bucket, download.Key, range);
 			this.downloadlist[index].isdownloadPaused = true;
 		},
 		//继续下载
@@ -1227,22 +1402,35 @@ export default {
 				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
 					var start = i*sliceSize;
 					var end = start + sliceSize -1;
+					this.downloadlist[index].start = i*sliceSize
 					range = "bytes=" + start + "-" + end;
 					console.log(range);
 					var part = await getObject(download.Bucket, download.Key, range);
-					let buffer = Buffer.from(part);
-					let buff = Buffer.from(content);
-					content = Buffer.concat([buff,buffer]);
-					//异步操作后重新获取下载内容的index
-					var index2 = 0;
-					for(var k=0;k<this.downloadlist.length;k++){
-						if(this.downloadlist[k].name == download.name){
-							index2 = k;
-							break;
+					if(part == 0){
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n下载失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						this.cancelDownload(this.downloadlist[index]);
+						break;
+					}else{
+						let buffer = Buffer.from(part);
+						let buff = Buffer.from(content);
+						content = Buffer.concat([buff,buffer]);
+						//异步操作后重新获取下载内容的index
+						var index2 = 0;
+						for(var k=0;k<this.downloadlist.length;k++){
+							if(this.downloadlist[k].name == download.name){
+								index2 = k;
+								break;
+							}
 						}
-					}
-					this.downloadlist[index2].percent2 = (i+1)/slice*100;
-					console.log(this.downloadlist[index2].percent2);				
+						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						console.log(this.downloadlist[index2].percent2);
+					}				
 				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
 					for(var i=0;i<this.downloadtemp.length;i++){
 						if(this.downloadtemp[i].Name == download.name){
@@ -1280,19 +1468,30 @@ export default {
 						window.URL.revokeObjectURL(url);
 					};
 				}());
-				saveData(blob, download.Key);
-				
+				saveData(blob, key);				
 				this.$notify({
 					title: "温馨提示",
-					message: download.Key+"\n下载成功",
+					message: key+"\n下载成功",
 					duration: 5000,
 					offset: 50,
 					type: "success"
-				});
-			}			
+				});			
+			}
 		},
+		// downloadThrottle(download){
+		// 	console.log("test")
+		// 	var pre = 0;
+		// 	var now = Date.now();
+		// 	if(now-pre>=1500){
+		// 		this.continueDownload(download);
+		// 		pre = Date.now();
+		// 	}
+		// },
 		//取消下载
 		cancelDownload(download){
+			if(download.Size<10*1024*1024){
+				abortDownload(download.Bucket, download.Key);
+			}
 			var index = 0;
 			for(var i=0;i<this.downloadlist.length;i++){
 				if(this.downloadlist[i].name == download.name){
@@ -1347,10 +1546,22 @@ export default {
 			}			
 		},
 
+		//获取AccessKey
+		async getKey(name){
+			var data = await createKey(name);
+			if(data != 0 ){
+				var AccessKeyId = data.AccessKeyId;
+				var SecretAccessKey = data.SecretAccessKey;
+				ConfigKey(AccessKeyId, SecretAccessKey);
+				this.buckets = this.loadAll();
+			}else{
+				this.$message.error('获取AccessKey失败！')
+			}				
+		}
 	},
-	mounted(){		
-		this.buckets = this.loadAll();
-						
+	mounted(){				
+		var name = this.$store.state.username;
+		this.getKey(name);		
 	}
 };
 </script>
