@@ -133,7 +133,7 @@
 import router from 'vue-router'
 import store from '../store'
 import { transData, rsaDecrypt, aesEncrypt } from '../api/encrypt';
-import {createUser} from '../api/s3api'
+import {createUser, InitAWS} from '../api/s3api'
 
 export default {
   data() {
@@ -674,6 +674,7 @@ export default {
     async handleCompleteReg() {
       this.registerFormVisible = false;
       this.registerForm2Visible = false;
+      InitAWS(this.$store.state.interfaceIp);
       var data = await createUser(this.regForm.username);
       if(data != 0){
         this.$notify({
@@ -703,11 +704,15 @@ export default {
         console.log(name,value); 
       }; 
       if(this.configForm.cmIp != ""){
-        this.$store.dispatch('changecmIp',this.configForm.cmIp);
+        //this.$store.dispatch('changecmIp',this.configForm.cmIp);
+        this.$store.commit('changecm',this.configForm.cmIp);
+        console.log(this.$store.state.cmIp);
         document.cookie="cmIp="+this.configForm.cmIp;
-      }
+      };
       if(this.configForm.interfaceIp != ""){
-        this.$store.dispatch('changeinterfaceIp',this.configForm.interfaceIp);
+        //this.$store.dispatch('changeinterfaceIp',this.configForm.interfaceIp);
+        this.$store.commit('changeinterface',this.configForm.interfaceIp);
+        console.log(this.$store.state.interfaceIp);
         document.cookie="interfaceIp="+this.configForm.interfaceIp;
       }
       this.configVisible = false;

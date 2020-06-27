@@ -285,7 +285,7 @@ import '../api/s3api'
 import '../assets/iconfont'
 import router from 'vue-router'
 import {throttle} from 'lodash'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, abortDownload, createUser, createKey, ConfigKey } from '../api/s3api';
+import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, abortDownload, createUser, createKey, ConfigKey, InitAWS } from '../api/s3api';
 export default {
   data() {
 
@@ -1561,6 +1561,7 @@ export default {
 	},
 	mounted(){				
 		var name = this.$store.state.username;
+		InitAWS(this.$store.state.interfaceIp);
 		this.getKey(name);		
 	}
 };

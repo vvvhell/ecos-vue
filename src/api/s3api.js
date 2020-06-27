@@ -13,7 +13,12 @@ AWS.config.update({
 // 连接亚马逊s3
 //const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
-const ep = new AWS.Endpoint(store.state.interfaceIp);
+
+export function InitAWS(ip){
+	return ip;
+}
+
+const ep = new AWS.Endpoint(InitAWS(ip));
 const s3 = new AWS.S3({endpoint: ep});
 const iam = new AWS.IAM({endpoint: ep});
 
