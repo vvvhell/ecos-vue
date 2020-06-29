@@ -1,5 +1,6 @@
 import store from '../store/index'
 
+
 var AWS = require("aws-sdk");
 AWS.config.update({
 
@@ -15,10 +16,11 @@ AWS.config.update({
 // 连接ECOS服务器
 
 export function InitAWS(ip){
+	
 	return ip;
 }
 
-const ep = new AWS.Endpoint(InitAWS(ip));
+const ep = new AWS.Endpoint(store.state.interfaceIp);
 const s3 = new AWS.S3({endpoint: ep});
 const iam = new AWS.IAM({endpoint: ep});
 
@@ -67,13 +69,16 @@ export async function listBuckets(){
 	}
 }
 
-export async function listObjects(bucket) {
+export async function listObjects(bucket, marker) {
 	const param = {
 		Bucket: bucket + '/',
+		MaxKeys:1000,
+		Marker:marker
 	};	
 	try {
 		const data = await s3.listObjects(param).promise();
-		return data.Contents;
+		console.log(data);
+		return data;
 	} catch (e) {
 		console.log(e);
 		return e;
@@ -230,11 +235,10 @@ export async function abortUpload(bucket, key, uploadID){
 	try {
 		console.log(params.Bucket);
 		const data = await s3.abortMultipartUpload(params).promise();
-		console.log(data);
 		return data;
 	} catch (e) {
 		console.log(e);
-		return e;
+		return 0;
 	}
 }
 

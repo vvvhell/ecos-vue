@@ -717,6 +717,7 @@ export default {
       }
       this.configVisible = false;
     }
+
   }
 };
 </script>

@@ -113,7 +113,7 @@
 								<el-table
 									v-loading="loadingtable"
 									:data="objects"
-									height="380"
+									height="800"
 									stripe
 									style="width: 100%">
 									<el-table-column prop="Key" label="文件对象名" width="250">
@@ -413,7 +413,6 @@ export default {
 						this.totalVol = 0;
 						this.fileNum = 0;
 						this.loadObjects2(this.buckets[i].Name);
-						this.loading2 = false;
 					}			
 				}
 			})
@@ -427,32 +426,75 @@ export default {
 					callback(value);
 				});
 			};
+			var that = this;
+			async function loadpiece(param, marker){
+				var data = await listObjects(param, marker);
+				that.objects = that.objects.concat(data.Contents);
+				that.objectNum += data.Contents.length;
+				if(data.NextMarker != ""){
+					loadpiece(param, data.NextMarker)
+				}else{
+					var Vol = 0;
+					for(var i=0; i<that.objectNum; i++){
+						Vol += that.objects[i].Size;
+					};
+					that.totalVol += Vol;
+					that.fileNum += that.objectNum;
+					if(that.totalVol<1024){
+						that.showVol = that.totalVol.toFixed(2);
+						that.unit1 = "B";
+					}
+					if(1024<=that.totalVol<1024*1024){
+						that.showVol = (that.totalVol/1024).toFixed(2);
+						that.unit1 = "KB";
+					}
+					if(1024*1024<=that.totalVol<1024*1024*1024){
+						that.showVol = (that.totalVol/1024/1024).toFixed(2);
+						that.unit1 = "MB";
+					}
+					if(that.totalVol>=1024*1024*1024){
+						that.showVol = (that.totalVol/1024/1024/1024).toFixed(2);
+						that.unit1 = "GB";
+					}
+					that.loading2 = false;
+				}
+			}
 			fn2(value => {
 				console.log(value);
-				this.objects = value;
-				this.objectNum = this.objects.length;
-				var Vol = 0;
-				for(var i=0; i<this.objectNum; i++){
-					Vol += this.objects[i].Size;
-				};
-				this.totalVol += Vol;
-				this.fileNum += this.objectNum;
-				if(this.totalVol<1024){
-					this.showVol = this.totalVol.toFixed(2);
-					this.unit1 = "B";
+				if(value.IsTruncated == true){
+					this.objects = value.Contents;
+					this.objectNum = this.objects.length;	
+					console.log('objects',this.objects);
+					loadpiece(param, value.NextMarker);
+					this.loading2 = true;
+				}else{
+					var Vol = 0;
+					this.objects = value.Contents;
+					this.objectNum = this.objects.length;				
+					for(var i=0; i<this.objectNum; i++){
+						Vol += this.objects[i].Size;
+					};
+					this.totalVol += Vol;
+					this.fileNum += this.objectNum;
+					if(this.totalVol<1024){
+						this.showVol = this.totalVol.toFixed(2);
+						this.unit1 = "B";
+					}
+					if(1024<=this.totalVol<1024*1024){
+						this.showVol = (this.totalVol/1024).toFixed(2);
+						this.unit1 = "KB";
+					}
+					if(1024*1024<=this.totalVol<1024*1024*1024){
+						this.showVol = (this.totalVol/1024/1024).toFixed(2);
+						this.unit1 = "MB";
+					}
+					if(this.totalVol>=1024*1024*1024){
+						this.showVol = (this.totalVol/1024/1024/1024).toFixed(2);
+						this.unit1 = "GB";
+					}
+					this.loading2 = false;
 				}
-				if(1024<=this.totalVol<1024*1024){
-					this.showVol = (this.totalVol/1024).toFixed(2);
-					this.unit1 = "KB";
-				}
-				if(1024*1024<=this.totalVol<1024*1024*1024){
-					this.showVol = (this.totalVol/1024/1024).toFixed(2);
-					this.unit1 = "MB";
-				}
-				if(this.totalVol>=1024*1024*1024){
-					this.showVol = (this.totalVol/1024/1024/1024).toFixed(2);
-					this.unit1 = "GB";
-				}
+								
 			})				
 			return param;						
 		},
@@ -472,33 +514,72 @@ export default {
 				});
 			};
 			this.loadingtable = true;
+			var that = this;
+			async function loadpiece(param, marker){
+				var data = await listObjects(param, marker);
+				that.objects = that.objects.concat(data.Contents);
+				that.objectNum += data.Contents.length;
+				if(data.NextMarker != ""){
+					loadpiece(param, data.NextMarker)
+				}else{
+					var Vol = 0;
+					for(var i=0; i<that.objectNum; i++){
+						Vol += that.objects[i].Size;
+						that.$set(that.objects[i],'Bucket',that.bucketName);
+					};
+					if(Vol<1024){
+						that.bucketVol = Vol.toFixed(2);
+						that.unit2 = 'B'
+					}
+					if(Vol>=1024){
+						that.bucketVol = (Vol/1024).toFixed(2);
+						that.unit2 = "KB"	
+					}
+					if(Vol>=1024*1024){
+						that.bucketVol = (Vol/1024/1024).toFixed(2);
+						that.unit2 = "MB"
+					}
+					if(Vol>=1024*1024*1024){
+						that.bucketVol = (Vol/1024/1024/1024).toFixed(2);
+						that.unit2 = "GB"
+					}	
+					that.loadingtable = false;
+				}
+			}
 			fn2(value => {
-				console.log(value);
-				this.objects = value;
-				this.objectNum = this.objects.length;
-				var Vol = 0;
-				for(var i=0; i<this.objectNum; i++){
-					Vol += this.objects[i].Size;
-					this.$set(this.objects[i],'Bucket',this.bucketName);
-				};
-				if(Vol<1024){
-					this.bucketVol = Vol.toFixed(2);
-					this.unit2 = 'B'
-				}
-				if(Vol>=1024){
-					this.bucketVol = (Vol/1024).toFixed(2);
-					this.unit2 = "KB"	
-				}
-				if(Vol>=1024*1024){
-					this.bucketVol = (Vol/1024/1024).toFixed(2);
-					this.unit2 = "MB"
-				}
-				if(Vol>=1024*1024*1024){
-					this.bucketVol = (Vol/1024/1024/1024).toFixed(2);
-					this.unit2 = "GB"
-				}
-	
-				this.loadingtable = false;
+				console.log(value);				
+				if(value.IsTruncated == true){
+					this.objects = value.Contents;
+					this.objectNum = this.objects.length;	
+					console.log('objects',this.objects);
+					loadpiece(param, value.NextMarker);
+				}else{
+					this.objects = value.Contents;
+					this.objectNum = this.objects.length;					
+					console.log('objects',this.objects);					
+					var Vol = 0;
+					for(var i=0; i<this.objectNum; i++){
+						Vol += this.objects[i].Size;
+						this.$set(this.objects[i],'Bucket',this.bucketName);
+					};
+					if(Vol<1024){
+						this.bucketVol = Vol.toFixed(2);
+						this.unit2 = 'B'
+					}
+					if(Vol>=1024){
+						this.bucketVol = (Vol/1024).toFixed(2);
+						this.unit2 = "KB"	
+					}
+					if(Vol>=1024*1024){
+						this.bucketVol = (Vol/1024/1024).toFixed(2);
+						this.unit2 = "MB"
+					}
+					if(Vol>=1024*1024*1024){
+						this.bucketVol = (Vol/1024/1024/1024).toFixed(2);
+						this.unit2 = "GB"
+					}	
+					this.loadingtable = false;
+				}				
 			})
 			return this.objects;
 		},		
@@ -642,7 +723,7 @@ export default {
 		async deleteAll(){
 			//删除文件
 			for(var i=0;i<this.objects.length;i++){
-				var msg = deleteObject(this.bucketName, this.objects[i].Key);
+				var msg = await deleteObject(this.bucketName, this.objects[i].Key);
 			}						
 			this.loadObjects(this.bucketName);
 			//删除未完成的分片上传
@@ -660,7 +741,7 @@ export default {
 
 		//打开上传列表
 		openUploadlist(){
-			console.log("上传列表");
+			console.log("上传列表",this.uploadlist);
 			this.$data.overviewvisible = false;
 			this.$data.detailvisible = false;
 			this.$data.uploadlistvisible = true;
@@ -669,7 +750,7 @@ export default {
 
 		//打开下载列表
 		openDownloadlist(){
-			console.log("下载列表");
+			console.log("下载列表",this.downloadlist);
 			this.$data.overviewvisible = false;
 			this.$data.detailvisible = false;
 			this.$data.uploadlistvisible = false;
@@ -1073,21 +1154,18 @@ export default {
 			var index = 0;
 			for(var i=0;i<this.uploadlist.length;i++){
 				if(this.uploadlist[i].Key == upload.Key){
-					console.log(this.uploadlist[i].Key);
+					console.log("取消上传",this.uploadlist[i].Key);
 					index = i;
 					break;
 				}
 			};
 			this.uploadlist[index].isActive = false;
-			if(this.uploadlist[index].Size >= 15*1024*1024){
-				let bucket = this.uploadlist[index].Bucket;
-				let key = this.uploadlist[index].key;
-				let uploadID = this.uploadlist[index].UploadID;
-				console.log(bucket,key,UploadID);
-				await abortUpload(bucket, key, uploadID);				
-				this.uploadlist.splice(index,1);
-			}else{
-				this.uploadlist.splice(index,1);
+			this.uploadlist.splice(index,1);			
+			if(this.uploadlist[index].Size >= 15*1024*1024){				
+				let bucket = upload.Bucket;
+				let key = upload.key;
+				let uploadId = upload.UploadID;
+				await abortUpload(bucket, key, uploadId);								
 			}
 		},
 
@@ -1136,7 +1214,7 @@ export default {
 			}
 			var renameobj = this.objects[index];
 			for(var i=0;i<this.downloadlist.length;i++){
-				if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.key == this.downloadlist[i].Key){
+				if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.Key == this.downloadlist[i].Key){
 					this.$notify({
 						title: "温馨提示",
 						message: key+"\n已在下载列表中，请勿重复下载",
