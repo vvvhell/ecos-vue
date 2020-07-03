@@ -696,12 +696,18 @@ export default {
 
 		//删除bucket
 		async handleDeleteBucket(){
+			for(var i=0;i<this.bucketNum;i++){
+				if(this.buckets[i].Name == this.bucketName){
+					this.buckets[i].getting = true;
+				}
+			};
 			console.log("delete",this.bucketName, this.objectNum);
 			//object数量不为0
-			if(this.objectNum != 0){
-				this.deleteAll();
+			if(this.objectNum != 0){				
+				await this.deleteAll();
+				await this.deleteUpload();
 			}else{		//object数量为0
-				this.deleteUpload();
+				await this.deleteUpload();
 			}
 		},
 		//删除未完成上传的分片
@@ -709,7 +715,7 @@ export default {
 			var list = await listMultipartUploads(this.bucketName);
 			console.log("list",list);
 			if(list.length == 0){
-				deleteBucket(this.bucketName);
+				await deleteBucket(this.bucketName);
 				this.$notify({
 						title: "温馨提示",
 						message: "Bucket删除成功",
@@ -725,7 +731,7 @@ export default {
 					let UploadId = list[i].UploadId;
 					var data = await abortUpload(Bucket, Key, UploadId);
 				}
-				deleteBucket(this.bucketName);
+				await deleteBucket(this.bucketName);
 				this.$notify({
 						title: "温馨提示",
 						message: "Bucket删除成功",
@@ -742,9 +748,6 @@ export default {
 			for(var i=0;i<this.objects.length;i++){
 				var msg = await deleteObject(this.bucketName, this.objects[i].Key);
 			}						
-			this.loadObjects(this.bucketName);
-			//删除未完成的分片上传
-			this.deleteUpload();
 		},
 
 		//打开详情页面

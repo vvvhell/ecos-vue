@@ -191,7 +191,7 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID, signal
 		var request = s3.uploadPart(params);
 		var data;
 		//ETag暂时不做校验，校验时从响应header中获取ETag字段
-		if(abortsignal == false){
+		if(abortsignal == true){
 			console.log("abort",params);
 			request.abort.bind(request);
 			data = 'abort'

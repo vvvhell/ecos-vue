@@ -256,12 +256,12 @@ export default {
     }
     var cmIp = "cmIp";
     var interfaceIp = "interfaceIp";
-    if(getCookie(cmIp) != ""){
-      this.$store.dispatch('changecmIp', getCookie(cmIp));
-    };
-    if(getCookie(interfaceIp) != ""){
-      this.$store.dispatch('changeinterfaceIp',getCookie(interfaceIp));
-    }
+    // if(getCookie(cmIp) != ""){
+    //   this.$store.dispatch('changecmIp', getCookie(cmIp));
+    // };
+    // if(getCookie(interfaceIp) != ""){
+    //   this.$store.dispatch('changeinterfaceIp',getCookie(interfaceIp));
+    // }
   },
 
   methods: {
