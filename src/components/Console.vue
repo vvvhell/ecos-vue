@@ -155,10 +155,10 @@
 						<el-card class="uploadlist" v-show="uploadlistvisible" v-bind:key="upload.Key" v-if="upload.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{upload.Key}}</span>
-								<el-button style="margin-left: 15px" type="primary" circle v-if="upload.isPaused && upload.percent1!=100" @click="continueUpload(upload)">
+								<el-button style="margin-left: 15px" type="primary" circle v-if="upload.isPaused && upload.percent1!=100" :disabled="getPauseload(upload)" @click="continueUpload(upload)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting" ></use></svg>
 								</el-button>
-								<el-button style="margin-left: 15px" type="warning" circle v-if="!upload.isPaused && upload.percent!=100" @click="pauseUpload(upload)">
+								<el-button style="margin-left: 15px" type="warning" circle v-if="!upload.isPaused && upload.percent!=100" :disabled="getPauseload(upload)" @click="pauseUpload(upload)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
 								</el-button>
 								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelUpload(upload)"></el-button>
@@ -801,7 +801,8 @@ export default {
 				UploadID: "",
 				parts: [],
 				isPaused: false,
-				isActive: true
+				isActive: true,
+				loading: false
 			};
 			for(var i=0;i<this.uploadlist.length;i++){
 				if(tempobj.Bucket == this.uploadlist[i].Bucket && tempobj.key == this.uploadlist[i].key){
@@ -899,6 +900,9 @@ export default {
 				}				
 			}		
 		},
+		getPauseload(upload){
+			return upload.loading;
+		},
 		//分片上传大文件
 		async putBigobj(blob, name, key, size, Key){
 			var uploadID = await getUploadID(name, key);
@@ -920,7 +924,7 @@ export default {
 					this.cancelUpload(this.uploadlist[index]);
 				return;
 			}else{
-				var sliceSize= 15*1024*1024;
+				var sliceSize= 10*1024*1024;
 				var slice = Math.ceil(size/sliceSize);
 				var parts = [];
 				for(var i=0; i<slice ;i++){
@@ -945,12 +949,13 @@ export default {
 						console.log("range:", start, end);
 						var chunk = blob.slice(start, end);
 						var partnumber = i+1;
-						//if(this.uploadlist[index].isPaused == false){
+						if(this.uploadlist[index].isPaused == false){
 							var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
-						//	if(this.uploadlist[index].isPaused == false){
-						//		msg = 'abort'
-						//	}
-						//}						
+							if(this.uploadlist[index].isPaused == true){
+								msg = 'abort';
+								this.uploadlist[index].loading = false;
+							}
+						}						
 						if(msg != 0){
 							var index1 = 0;
 							for(var k=0;k<this.uploadlist.length;k++){
@@ -958,18 +963,17 @@ export default {
 									index1 = k;
 									break;
 								}
-							}
-							this.uploadlist[index1].percent1 = (i+1)/slice*100;							
-							console.log("percent", this.uploadlist[index1].percent1);
+							}														
 							partobj.ETag = msg;
 							partobj.PartNumber = partnumber;
 							parts.push(partobj);
 							this.uploadlist[index1].parts.push(partobj);
-							// if(msg !== 'abort' ){
-							// 	console.log('point')
-							// 	this.uploadlist[index1].percent1 = (i+1)/slice*100;
-							// 	console.log(this.uploadlist[index1].percent1)
-							// }
+							if(msg == 'abort' ){
+								console.log('point')								
+							}else{
+								this.uploadlist[index1].percent1 = (i+1)/slice*100;
+							}
+							console.log("percent", this.uploadlist[index1].percent1);
 						}else if(msg == 0){
 							this.$notify({
 								title: "温馨提示",
@@ -1031,7 +1035,6 @@ export default {
 		pauseUpload(upload){
 			var index = 0;
 			for(var i=0;i<this.uploadlist.length;i++){
-				console.log("i",i);
 				if(this.uploadlist[i].Key == upload.Key){
 					console.log(this.uploadlist[i].Key);
 					index = i;
@@ -1039,6 +1042,7 @@ export default {
 				}
 			};
 			this.uploadlist[index].isPaused = true;
+			this.uploadlist[index].loading = true;
 		},
 		//继续上传
 		continueUpload(upload){
@@ -1058,7 +1062,7 @@ export default {
 			fileReader.onload = async function(){
 				console.log(this.result);
 				var blob = new Blob([this.result]);
-				var sliceSize= 15*1024*1024;
+				var sliceSize= 10*1024*1024;
 				var slice = Math.ceil(upload.File.size/sliceSize);
 				//获取已上传信息
 				var uploaded = await uploadedParts(upload.Bucket, upload.key, upload.UploadID);
@@ -1087,11 +1091,13 @@ export default {
 						var chunk = blob.slice(start, end);
 						console.log("chunksize: ",chunk.size);
 						var partnumber = i+1;
-						//if(that.uploadlist[index1].isPaused == false){
+						if(that.uploadlist[index1].isPaused == false){
 							var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
-							// if(that.uploadlist[index1].isPaused == true){
-							// 	msg = 'abort'
-							// }
+							if(that.uploadlist[index1].isPaused == true){
+								msg = 'abort';
+								that.uploadlist[index1].loading = false;
+							}
+						}
 							if(msg != 0){
 								var index2 = 0;
 								for(var j=0;j<that.uploadlist.length;j++){
@@ -1099,15 +1105,16 @@ export default {
 										index2 = j;
 										break;
 									}
-								}
-								that.uploadlist[index2].percent1 = (i+1)/slice*100;								
-								console.log("percent", that.uploadlist[index2]);
+								}								
 								partobj.ETag = msg;
 								partobj.PartNumber = partnumber;
 								that.uploadlist[index2].parts.push(partobj);
-								// if(msg !='abort'){
-								// 	that.uploadlist[index2].percent1 = (i+1)/slice*100;
-								// }
+								if(msg == 'abort'){
+									console.log('point');
+								}else{
+									that.uploadlist[index2].percent1 = (i+1)/slice*100;
+								}
+								console.log("percent", that.uploadlist[index2]);
 							}else if(msg == 0){
 								that.$notify({
 									title: "温馨提示",
@@ -1119,7 +1126,6 @@ export default {
 								that.cancelUpload(upload);
 								return;
 							}					
-						//}
 					}
 				}
 				//完成上传

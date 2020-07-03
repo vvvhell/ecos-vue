@@ -25,7 +25,7 @@
             <el-form-item>
               <br />
               <div style="text-align: center">
-                <el-button type="primary" @click="handleLogin">登 录</el-button>
+                <el-button type="primary" @click="handleLogin1">登 录</el-button>
                 <el-button @click="registerFormVisible = true">注 册</el-button>
               </div>
             </el-form-item>
@@ -256,12 +256,14 @@ export default {
     }
     var cmIp = "cmIp";
     var interfaceIp = "interfaceIp";
-    // if(getCookie(cmIp) != ""){
-    //   this.$store.dispatch('changecmIp', getCookie(cmIp));
-    // };
-    // if(getCookie(interfaceIp) != ""){
-    //   this.$store.dispatch('changeinterfaceIp',getCookie(interfaceIp));
-    // }
+    if(getCookie(cmIp) != ""){
+      this.$store.dispatch('changecmIp', getCookie(cmIp));
+      console.log(this.$store.state.cmIp);
+    };
+    if(getCookie(interfaceIp) != ""){
+      this.$store.dispatch('changeinterfaceIp',getCookie(interfaceIp));
+      console.log(this.$store.state.cmIp);
+    }
   },
 
   methods: {
@@ -425,6 +427,12 @@ export default {
         });  
 
       }
+    },
+    //用于测试点击直接跳转控制台
+    handleLogin1(){
+      this.loginFormVisible = false;
+      this.$store.dispatch('loginAct','测试用户');
+      this.$router.replace({path:'/Console/'+this.$store.state.username});      
     },
     //轮询登录信息
     Confirm(data, logReq3){

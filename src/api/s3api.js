@@ -4,25 +4,25 @@ import store from '../store/index'
 var AWS = require("aws-sdk");
 AWS.config.update({
 
-		accessKeyId:'d18f4b611f2f71296e532eb30521c67e',
-		secretAccessKey:'c285c6d63b13c0843e8d337e0c591177',
-		s3ForcePathStyle: true,
-		signatureVersion:'v4',
-		region:'us-east-1'
+	accessKeyId:'d18f4b611f2f71296e532eb30521c67e',
+	secretAccessKey:'c285c6d63b13c0843e8d337e0c591177',
+	s3ForcePathStyle: true,
+	signatureVersion:'v4',
+	region:'us-east-1'
 
 });
 // 连接亚马逊s3
 //const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
 
-export function InitAWS(ip){
-	
-	return ip;
-}
+let ep = new AWS.Endpoint(store.state.interfaceIp);
+let s3 = new AWS.S3({endpoint: ep});
+let iam = new AWS.IAM({endpoint: ep});
 
-const ep = new AWS.Endpoint(store.state.interfaceIp);
-const s3 = new AWS.S3({endpoint: ep});
-const iam = new AWS.IAM({endpoint: ep});
+export function InitAWS(ip){
+	s3.endpoint = ip;
+	iam.endpoint = ip;
+}
 
 export function ConfigKey(AccessKeyId,SecretAccessKey){
 	AWS.config.update({
@@ -178,7 +178,7 @@ export async function getUploadID(bucket, key){
 	}
 }
 
-export async function uploadPart(body, bucket, key, partnumber, uploadID, signal){
+export async function uploadPart(body, bucket, key, partnumber, uploadID){
 	const params = {
 		Body: body,
 		Bucket: bucket,
@@ -186,30 +186,19 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID, signal
 		PartNumber: partnumber,
 		UploadId: uploadID
 	};
-	let abortsignal = signal;
 	try {
-		var request = s3.uploadPart(params);
-		var data;
 		//ETag暂时不做校验，校验时从响应header中获取ETag字段
-		if(abortsignal == true){
-			console.log("abort",params);
-			request.abort.bind(request);
-			data = 'abort'
-			return data;			
-		}
-		else{
-			data = await s3.uploadPart(params).promise()
-			var response = '';
-			function success(callback){
-				var value = s3.uploadPart(params).on("httpHeaders",(200));
-				callback(value);
-			};
-			success(value=>{
-				console.log("value",value);
-				response = 'OK'
-			})
-			return response;
-		}
+    await s3.uploadPart(params).promise()
+		var response = '';
+		function success(callback){
+			var value = s3.uploadPart(params).on("httpHeaders",(200));
+			callback(value);
+		};
+		success(value=>{
+			console.log("value",value);
+			response = 'OK'
+		})
+		return response;
 	} catch (e) {
 		console.log(e);
 		return 0;
