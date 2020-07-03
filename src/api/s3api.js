@@ -1,4 +1,5 @@
 import store from '../store/index'
+import { call } from 'file-loader';
 
 
 var AWS = require("aws-sdk");
@@ -69,19 +70,26 @@ export async function listBuckets(){
 	}
 }
 
-export async function listObjects(bucket, marker) {
-	const param = {
+export async function listObjects(bucket, signal, marker ) {
+	const params = {
 		Bucket: bucket + '/',
 		MaxKeys:1000,
 		Marker:marker
-	};	
-	try {
-		const data = await s3.listObjects(param).promise();
-		console.log(data);
-		return data;
+	};
+	let abortsignal = signal;	
+	try {		
+		var request = s3.listObjects(params);
+		var data = request.promise();
+		if(abortsignal == false){
+			return data;
+		}else{
+			console.log("abort",params);
+			request.abort.bind(request);
+			return 0;
+		}			
 	} catch (e) {
 		console.log(e);
-		return e;
+		return 0;
 	}
 }
 
@@ -104,7 +112,7 @@ export async function createBucket(name){
 		return response;
 	} catch (e) {
 		console.log(e);
-		return [];
+		return 0;
 	}
 }
 
@@ -145,26 +153,14 @@ export async function getObject(bucket, key, range){
 		Range: range,
 	};
 	try {
+		var request = s3.getObject(params);
+		console.log(request);
+
 		const data = await s3.getObject(params).promise();
 		return data.Body;
 	} catch (error) {
 		console.log(error);
 		return 0;
-	}
-}
-//暂停后取消未下载完成的分片
-export function abortDownload(bucket, key, range){
-	const params = {
-		Bucket: bucket,
-		Key: key,
-		Range: range,
-	};
-	try {
-		s3.getObject(params).abort();
-		console.log('abort',params.Range);
-	} catch (e) {
-		console.log(e);
-		return e;
 	}
 }
 
@@ -183,7 +179,7 @@ export async function getUploadID(bucket, key){
 	}
 }
 
-export async function uploadPart(body, bucket, key, partnumber, uploadID){
+export async function uploadPart(body, bucket, key, partnumber, uploadID, signal){
 	const params = {
 		Body: body,
 		Bucket: bucket,
@@ -191,19 +187,30 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID){
 		PartNumber: partnumber,
 		UploadId: uploadID
 	};
+	let abortsignal = signal;
 	try {
+		var request = s3.uploadPart(params);
+		var data;
 		//ETag暂时不做校验，校验时从响应header中获取ETag字段
-		await s3.uploadPart(params).promise()
-		var response = '';
-		function success(callback){
-			var value = s3.uploadPart(params).on("httpHeaders",(200));
-			callback(value);
-		};
-		success(value=>{
-			console.log("value",value.httpResponse);
-			response = 'OK'
-		})
-		return response;
+		if(abortsignal == false){
+			console.log("abort",params);
+			request.abort.bind(request);
+			data = 'abort'
+			return data;			
+		}
+		else{
+			data = await s3.uploadPart(params).promise()
+			var response = '';
+			function success(callback){
+				var value = s3.uploadPart(params).on("httpHeaders",(200));
+				callback(value);
+			};
+			success(value=>{
+				console.log("value",value);
+				response = 'OK'
+			})
+			return response;
+		}
 	} catch (e) {
 		console.log(e);
 		return 0;
@@ -276,7 +283,7 @@ export async function deleteObject(bucket, key){
 	}
 }
 
-export async function listMultipartUploads(bucket, key){
+export async function listMultipartUploads(bucket){
 	const params = {
 		Bucket: bucket + '/',
 	};

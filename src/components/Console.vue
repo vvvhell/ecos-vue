@@ -48,7 +48,7 @@
 											:fetch-suggestions="querySearch"
 											@select="handleSelect"></el-autocomplete>
 								</el-menu-item>							
-								<el-menu-item class="bucketList" v-for="(bucket) in buckets" v-bind:key="bucket.Name" @click="handleJump(bucket)" v-on:click="openDetail">									
+								<el-menu-item class="bucketList" v-for="(bucket) in buckets" v-bind:key="bucket.Name" :disabled='getting(bucket)' @click="handleJump(bucket)" v-on:click="openDetail">									
 									<span>• {{bucket.Name}}</span>					
 								</el-menu-item>
 							</el-menu-item-group>
@@ -57,10 +57,10 @@
 							<i class="el-icon-upload2"></i>
 							<span slot="title">上传列表</span>					
 						</el-menu-item>
-						<el-menu-item index="4" v-on:click="openDownloadlist">
+						<!-- <el-menu-item index="4" v-on:click="openDownloadlist">
 							<i class="el-icon-download"></i>
 							<span slot="title">下载列表</span>					
-						</el-menu-item>												
+						</el-menu-item>												 -->
 					</el-menu>
 				</el-aside>
 
@@ -71,14 +71,15 @@
 							<el-card>
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
 								<el-divider></el-divider>
+								<el-button type="primary" @click="overviewData()" style="margin-bottom:20px" :loading="iscalculating">计算概览数据</el-button>
 								<el-row :gutter="30">
 									<el-col :span="7"><el-card v-loading="loading1">Bucket数量
 										<div class="subview">{{bucketNum}} 个</div>
 										</el-card></el-col>
-									<el-col :span="7"><el-card v-loading="loading2">全部Bucket已用空间
+									<el-col :span="7"><el-card v-loading="loading2" v-if='showOverviewdata'>全部Bucket已用空间
 										<div class="subview">{{showVol}} {{unit1}}</div>
 										</el-card></el-col>
-									<el-col :span="7"><el-card v-loading="loading2">全部Bucket文件数
+									<el-col :span="7"><el-card v-loading="loading2" v-if='showOverviewdata'>全部Bucket文件数
 										<div class="subview">{{fileNum}} 个</div>
 										</el-card></el-col>
 								</el-row>
@@ -108,8 +109,9 @@
 						</el-row>
 						<el-row style="margin-top:25px" v-show="detailvisible">
 							<el-card>
+								<el-button type="primary" icon="el-icon-refresh" :loading="loading(bucketName)" @click="refresh" >刷新</el-button>
 								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload">上传文件</el-button>
-								<el-button type="danger" icon="el-icon-delete" @click="handleDeleteBucket">删除存储桶</el-button>
+								<el-button type="danger" icon="el-icon-delete" @click="handleDeleteBucket" :loading="loading(bucketName)">删除存储桶</el-button>
 								<el-table
 									v-loading="loadingtable"
 									:data="objects"
@@ -127,8 +129,9 @@
 										<template slot-scope="scope">											
 											<el-button
 												type="primary"
-												size="mini"
-												@click="handleDownload(scope)" >下载</el-button>
+												size="mini">
+												<!-- @click="handleDownload(scope)"> -->
+												<a :href="getHref(scope)" :download="getDownloadname(scope)" target="_blank" style='text-decoration:none;color:white' type="video">下载</a></el-button>
 											<el-button 
 												type="info"
 												size="mini"
@@ -166,7 +169,7 @@
 					  </el-card>
 					  </template>
 
-						<template v-for="(download) in downloadlist">
+						<!-- <template v-for="(download) in downloadlist">
 						<el-card class="downloadlist" v-show="downloadlistvisible" v-bind:key="download.name" v-if="download.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{download.name}}</span>
@@ -182,7 +185,7 @@
 								</div>
 							</div>							
 					  </el-card>
-						</template>
+						</template> -->
 
 					</el-main>
           
@@ -285,7 +288,7 @@ import '../api/s3api'
 import '../assets/iconfont'
 import router from 'vue-router'
 import {throttle} from 'lodash'
-import { listBuckets, createBucket, listObjects, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, abortDownload, createUser, createKey, ConfigKey, InitAWS } from '../api/s3api';
+import { listBuckets, createBucket, listObjects, abortlist, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, abortDownload, createUser, createKey, ConfigKey, InitAWS } from '../api/s3api';
 export default {
   data() {
 
@@ -298,6 +301,7 @@ export default {
 			unit1: 'B',
 			fileNum: 0,
 			newBucketName:"",
+			showOverviewdata: false,
 
 			drawer: false,
 			createdrawer: false,
@@ -329,6 +333,8 @@ export default {
 			uploadindex: -1,
 			downloadnum:[],
 			downloadtemp:[],
+
+			iscalculating:false,
 
 			options:[
 				{
@@ -389,161 +395,168 @@ export default {
 			this.loadAll();
 		},
 		//listBuckets
-		loadAll(){
+		async loadAll(){
 			console.log("loadAll");
 			this.loading1 = true;
-			this.loading2 = true;
-			function fn1(callback){
-				listBuckets().then(function(value){
-					callback(value);
-				});
-			};
-			fn1(value => {
-				console.log(value);
-				this.buckets = value;
-				this.bucketNum = this.buckets.length;				
-				this.loading1 = false;
-				if(this.bucketNum == 0){
-					this.totalVol = 0;
-					this.fileNum = 0;
-					this.loading2 = false;
-				}else{
-					for(var i=0;i<this.bucketNum;i++){
-						console.log(this.buckets[i].Name);
-						this.totalVol = 0;
-						this.fileNum = 0;
-						this.loadObjects2(this.buckets[i].Name);
-					}			
+			this.loading2 = false;
+			this.buckets = await listBuckets();
+			this.bucketNum = this.buckets.length;				
+			this.loading1 = false;
+			if(this.bucketNum == 0){
+				this.totalVol = 0;
+				this.fileNum = 0;
+				this.loading2 = false;
+			}else{
+				for(var i=0;i<this.bucketNum;i++){
+					console.log(this.buckets[i].Name);
+					this.$set(this.buckets[i],'isActive', true);
+					this.$set(this.buckets[i],'getting', false);
 				}
-			})
+			}			
 			return this.buckets;
 		},		
 		//计算概览数据
-		loadObjects2(param){
-			function fn2(callback){
-				let bucket = param;
-				listObjects(bucket).then(function(value){
-					callback(value);
-				});
-			};
+		async overviewData(){
+			this.showOverviewdata = true;
+			var allObjects = [];			
 			var that = this;
-			async function loadpiece(param, marker){
-				var data = await listObjects(param, marker);
-				that.objects = that.objects.concat(data.Contents);
-				that.objectNum += data.Contents.length;
+			async function loadpiece(bucket, marker){
+				console.log(bucket, marker);
+				that.iscalculating = true;
+				var data = await listObjects(bucket, false, marker);
+				allObjects = allObjects.concat(data.Contents);
 				if(data.NextMarker != ""){
-					loadpiece(param, data.NextMarker)
+					loadpiece(bucket, data.NextMarker)
 				}else{
+					that.iscalculating = false;
+					that.fileNum = allObjects.length;
 					var Vol = 0;
-					for(var i=0; i<that.objectNum; i++){
-						Vol += that.objects[i].Size;
-					};
-					that.totalVol += Vol;
-					that.fileNum += that.objectNum;
-					if(that.totalVol<1024){
-						that.showVol = that.totalVol.toFixed(2);
-						that.unit1 = "B";
+					for(var k=0;k<that.fileNum;k++){
+						Vol += allObjects[k].Size;
 					}
-					if(1024<=that.totalVol<1024*1024){
-						that.showVol = (that.totalVol/1024).toFixed(2);
-						that.unit1 = "KB";
-					}
-					if(1024*1024<=that.totalVol<1024*1024*1024){
-						that.showVol = (that.totalVol/1024/1024).toFixed(2);
-						that.unit1 = "MB";
-					}
-					if(that.totalVol>=1024*1024*1024){
-						that.showVol = (that.totalVol/1024/1024/1024).toFixed(2);
-						that.unit1 = "GB";
-					}
-					that.loading2 = false;
 				}
+			};
+			for(var i=0;i<this.bucketNum;i++){
+				this.iscalculating = true;				
+				var value = await listObjects(this.buckets[i].Name, false, '');
+				allObjects = allObjects.concat(value.Contents);
+				if(value.IsTruncated == true){						
+					loadpiece(this.buckets[i].Name, value.NextMarker);
+				}else{
+					this.iscalculating = false;
+					this.fileNum = allObjects.length;
+					var Vol = 0;
+					for(var j=0;j<this.fileNum;j++){
+						Vol += allObjects[j].Size;
+					}
+					this.totalVol = Vol;					
+				}
+			};
+			if(this.totalVol<1024){
+				this.showVol = this.totalVol.toFixed(2);
+				this.unit1 = "B";
 			}
-			fn2(value => {
-				console.log(value);
-				if(value.IsTruncated == true){
-					this.objects = value.Contents;
-					this.objectNum = this.objects.length;	
-					console.log('objects',this.objects);
-					loadpiece(param, value.NextMarker);
-					this.loading2 = true;
-				}else{
-					var Vol = 0;
-					this.objects = value.Contents;
-					this.objectNum = this.objects.length;				
-					for(var i=0; i<this.objectNum; i++){
-						Vol += this.objects[i].Size;
-					};
-					this.totalVol += Vol;
-					this.fileNum += this.objectNum;
-					if(this.totalVol<1024){
-						this.showVol = this.totalVol.toFixed(2);
-						this.unit1 = "B";
-					}
-					if(1024<=this.totalVol<1024*1024){
-						this.showVol = (this.totalVol/1024).toFixed(2);
-						this.unit1 = "KB";
-					}
-					if(1024*1024<=this.totalVol<1024*1024*1024){
-						this.showVol = (this.totalVol/1024/1024).toFixed(2);
-						this.unit1 = "MB";
-					}
-					if(this.totalVol>=1024*1024*1024){
-						this.showVol = (this.totalVol/1024/1024/1024).toFixed(2);
-						this.unit1 = "GB";
-					}
-					this.loading2 = false;
-				}
-								
-			})				
-			return param;						
+			if(1024<=this.totalVol<1024*1024){
+				this.showVol = (this.totalVol/1024).toFixed(2);
+				this.unit1 = "KB";
+			}
+			if(1024*1024<=this.totalVol<1024*1024*1024){
+				this.showVol = (this.totalVol/1024/1024).toFixed(2);
+				this.unit1 = "MB";
+			}
+			if(this.totalVol>=1024*1024*1024){
+				this.showVol = (this.totalVol/1024/1024/1024).toFixed(2);
+				this.unit1 = "GB";
+			}
 		},
 		
 		//获取Object列表
 		handleJump(bucket){
 			console.log(bucket.Name, "jump");
 			var param = bucket.Name;
-			this.objects = this.loadObjects(param);	
-			this.$data.bucketName = param;			
+			this.$data.bucketName = param;
+			this.objects = this.loadObjects(param);							
+		},
+		refresh(){
+			this.objects = this.loadObjects(this.bucketName);
+		},
+		loading(bucketName){
+			for(var i=0;i<this.buckets.length;i++){
+				if(this.buckets[i].Name == bucketName){
+					return this.buckets[i].getting;
+				}
+			}
+		},
+		getting(bucket){
+			for(var i=0;i<this.buckets.length;i++){
+				if(this.buckets[i].Name == bucket.Name){
+					return this.buckets[i].getting;
+				}
+			}
 		},
 		loadObjects(param){
+			this.iscalculating = false;			
+			for(var i=0;i<this.buckets.length;i++){	
+				if(this.buckets[i].Name == param){
+					this.buckets[i].isActive = true;
+					this.buckets[i].getting = true;
+				}else{
+					this.buckets[i].isActive =false;
+					this.buckets[i].getting = false;
+				}										
+			}
+			console.log(this.buckets);
+			this.objects = [];
+			this.objectNum = 0;
+			var that = this;
 			function fn2(callback){
 				let bucket = param;
-				listObjects(bucket).then(function(value){
+				listObjects(bucket, false, '').then(function(value){
 					callback(value);
-				});
+				});									
 			};
 			this.loadingtable = true;
-			var that = this;
 			async function loadpiece(param, marker){
-				var data = await listObjects(param, marker);
-				that.objects = that.objects.concat(data.Contents);
-				that.objectNum += data.Contents.length;
-				if(data.NextMarker != ""){
-					loadpiece(param, data.NextMarker)
-				}else{
-					var Vol = 0;
-					for(var i=0; i<that.objectNum; i++){
-						Vol += that.objects[i].Size;
-						that.$set(that.objects[i],'Bucket',that.bucketName);
-					};
-					if(Vol<1024){
-						that.bucketVol = Vol.toFixed(2);
-						that.unit2 = 'B'
-					}
-					if(Vol>=1024){
-						that.bucketVol = (Vol/1024).toFixed(2);
-						that.unit2 = "KB"	
-					}
-					if(Vol>=1024*1024){
-						that.bucketVol = (Vol/1024/1024).toFixed(2);
-						that.unit2 = "MB"
-					}
-					if(Vol>=1024*1024*1024){
-						that.bucketVol = (Vol/1024/1024/1024).toFixed(2);
-						that.unit2 = "GB"
-					}	
-					that.loadingtable = false;
+				for(var i=0;i<that.buckets.length;i++){	
+					if(that.buckets[i].Name == param && that.buckets[i].isActive == true){
+						var data = await listObjects(param, false, marker);
+						if(that.buckets[i].isActive == false){
+							data = {Contents:[]};
+						}
+						that.objects = that.objects.concat(data.Contents);
+						that.objectNum += data.Contents.length;
+						if(data.NextMarker != "" ){
+							loadpiece(param, data.NextMarker)
+						}else{
+							for(var i=0;i<that.buckets.length;i++){
+								if(that.buckets[i].Name == param){
+									that.buckets[i].getting = false;
+								}
+							};
+							var Vol = 0;
+							for(var i=0; i<that.objectNum; i++){
+								Vol += that.objects[i].Size;
+								that.$set(that.objects[i],'Bucket',that.bucketName);
+							};
+							if(Vol<1024){
+								that.bucketVol = Vol.toFixed(2);
+								that.unit2 = 'B'
+							}
+							if(Vol>=1024){
+								that.bucketVol = (Vol/1024).toFixed(2);
+								that.unit2 = "KB"	
+							}
+							if(Vol>=1024*1024){
+								that.bucketVol = (Vol/1024/1024).toFixed(2);
+								that.unit2 = "MB"
+							}
+							if(Vol>=1024*1024*1024){
+								that.bucketVol = (Vol/1024/1024/1024).toFixed(2);
+								that.unit2 = "GB"
+							}	
+							that.loadingtable = false;
+						}
+					}				
 				}
 			}
 			fn2(value => {
@@ -551,9 +564,13 @@ export default {
 				if(value.IsTruncated == true){
 					this.objects = value.Contents;
 					this.objectNum = this.objects.length;	
-					console.log('objects',this.objects);
 					loadpiece(param, value.NextMarker);
 				}else{
+					for(var i=0;i<this.buckets.length;i++){
+						if(this.buckets[i].Name == param){
+							this.buckets[i].getting = false;
+						}
+					};		
 					this.objects = value.Contents;
 					this.objectNum = this.objects.length;					
 					console.log('objects',this.objects);					
@@ -578,10 +595,10 @@ export default {
 						this.bucketVol = (Vol/1024/1024/1024).toFixed(2);
 						this.unit2 = "GB"
 					}	
-					this.loadingtable = false;
+					this.loadingtable = false;					
 				}				
-			})
-			return this.objects;
+			})				
+			return this.objects;																
 		},		
 
 		//管理创建Bucket抽屉
@@ -797,20 +814,20 @@ export default {
 					continue;
 				}
 			}
-			for(var i=0;i<this.downloadlist.length;i++){
-				if(tempobj.Bucket == this.downloadlist[i].Bucket && tempobj.key == this.downloadlist[i].Key){
-					this.$notify({
-						title: "温馨提示",
-						message: key+"\n正在下载中，请勿上传同名文件",
-						duration: 5000,
-						offset: 50,
-						type: "error"
-					});
-					return;
-				}else{
-					continue;
-				}
-			}
+			// for(var i=0;i<this.downloadlist.length;i++){
+			// 	if(tempobj.Bucket == this.downloadlist[i].Bucket && tempobj.key == this.downloadlist[i].Key){
+			// 		this.$notify({
+			// 			title: "温馨提示",
+			// 			message: key+"\n正在下载中，请勿上传同名文件",
+			// 			duration: 5000,
+			// 			offset: 50,
+			// 			type: "error"
+			// 		});
+			// 		return;
+			// 	}else{
+			// 		continue;
+			// 	}
+			// }
 			if(this.uploadlist.length>0){
 				var num = 0;
 				for(var i=0;i<this.uploadlist.length;i++){
@@ -857,7 +874,6 @@ export default {
 							}
 						}
 						that.uploadlist[index].percent1 = 100;
-						that.loadObjects(name);
 					}else{
 						that.$notify({
 							title: "温馨提示",
@@ -877,7 +893,6 @@ export default {
 					}
 				}else{   //大于15MB的文件
 					var msg = await that.putBigobj(blob, name, key, size, tempobj.Key);
-					that.loadObjects(name);
 				}				
 			}		
 		},
@@ -927,7 +942,12 @@ export default {
 						console.log("range:", start, end);
 						var chunk = blob.slice(start, end);
 						var partnumber = i+1;
-						var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
+						//if(this.uploadlist[index].isPaused == false){
+							var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
+						//	if(this.uploadlist[index].isPaused == false){
+						//		msg = 'abort'
+						//	}
+						//}						
 						if(msg != 0){
 							var index1 = 0;
 							for(var k=0;k<this.uploadlist.length;k++){
@@ -936,13 +956,18 @@ export default {
 									break;
 								}
 							}
-							this.uploadlist[index1].percent1 = (i+1)/slice*100;
-							console.log("percent", this.uploadlist[index1]);
+							this.uploadlist[index1].percent1 = (i+1)/slice*100;							
+							console.log("percent", this.uploadlist[index1].percent1);
 							partobj.ETag = msg;
 							partobj.PartNumber = partnumber;
 							parts.push(partobj);
 							this.uploadlist[index1].parts.push(partobj);
-						}else{
+							// if(msg !== 'abort' ){
+							// 	console.log('point')
+							// 	this.uploadlist[index1].percent1 = (i+1)/slice*100;
+							// 	console.log(this.uploadlist[index1].percent1)
+							// }
+						}else if(msg == 0){
 							this.$notify({
 								title: "温馨提示",
 								message: key+"\n上传失败",
@@ -1011,7 +1036,6 @@ export default {
 				}
 			};
 			this.uploadlist[index].isPaused = true;
-			//s3.uploadPart(upload.).abort();
 		},
 		//继续上传
 		continueUpload(upload){
@@ -1060,32 +1084,40 @@ export default {
 						var chunk = blob.slice(start, end);
 						console.log("chunksize: ",chunk.size);
 						var partnumber = i+1;
-						var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
-						if(msg != 0){
-							var index2 = 0;
-							for(var j=0;j<that.uploadlist.length;j++){
-								if(that.uploadlist[j].Key == upload.Key){
-									index2 = j;
-									break;
+						//if(that.uploadlist[index1].isPaused == false){
+							var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
+							// if(that.uploadlist[index1].isPaused == true){
+							// 	msg = 'abort'
+							// }
+							if(msg != 0){
+								var index2 = 0;
+								for(var j=0;j<that.uploadlist.length;j++){
+									if(that.uploadlist[j].Key == upload.Key){
+										index2 = j;
+										break;
+									}
 								}
-							}
-							that.uploadlist[index2].percent1 = (i+1)/slice*100;
-							console.log("percent", that.uploadlist[index2]);
-							partobj.ETag = msg;
-							partobj.PartNumber = partnumber;
-							that.uploadlist[index2].parts.push(partobj);
-						}
-					}else{
-						that.$notify({
-							title: "温馨提示",
-							message: upload.key+"\n上传失败",
-							duration: 5000,
-							offset: 50,
-							type: "error"
-						});
-						that.cancelUpload(upload);
-						return;
-					}					
+								that.uploadlist[index2].percent1 = (i+1)/slice*100;								
+								console.log("percent", that.uploadlist[index2]);
+								partobj.ETag = msg;
+								partobj.PartNumber = partnumber;
+								that.uploadlist[index2].parts.push(partobj);
+								// if(msg !='abort'){
+								// 	that.uploadlist[index2].percent1 = (i+1)/slice*100;
+								// }
+							}else if(msg == 0){
+								that.$notify({
+									title: "温馨提示",
+									message: upload.key+"\n上传失败",
+									duration: 5000,
+									offset: 50,
+									type: "error"
+								});
+								that.cancelUpload(upload);
+								return;
+							}					
+						//}
+					}
 				}
 				//完成上传
 				var index3 = 0;
@@ -1131,7 +1163,6 @@ export default {
 					}
 
 				}				
-				that.loadObjects(upload.Bucket);
 			}		
 		},
 
@@ -1170,422 +1201,432 @@ export default {
 		},
 
 		//下载文件
-		handleDownload(scope){
-			console.log("下载",scope.row.Key);
-			var bucket = this.$data.bucketName;
-			this.loadObjects(bucket);		//防止下载列表名称变化，原理未解决
-			var key = scope.row.Key;
-			var size = scope.row.Size;
-			//重复下载计数表
-			if(this.downloadnum.length==0){
-				var a ={
-					Key:key,
-					num:1,
-				}
-				this.downloadnum.push(a);
-			}else{
-				for(var i=0;i<this.downloadnum.length;i++){
-					if(this.downloadnum[i].Key == key){
-						this.downloadnum[i].num += 1;
-						break;
-					}else{
-						var a ={
-							Key:key,
-							num:1,
-						}
-						this.downloadnum.push(a);
-					}
-				}	
-			}		
-			//处理重复下载情况
-			var index = 0;
-			for(var i=0;i<this.objects.length;i++){
-				if(this.objects[i].Key == key){
-					index = i;
-					break;
-				}
-			}
-			var index2 = 0;
-			for(var i=0;i<this.downloadnum.length;i++){
-				if(this.downloadnum[i].Key == key){
-					index2 = i;
-					break;
-				}
-			}
-			var renameobj = this.objects[index];
-			for(var i=0;i<this.downloadlist.length;i++){
-				if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.Key == this.downloadlist[i].Key){
-					this.$notify({
-						title: "温馨提示",
-						message: key+"\n已在下载列表中，请勿重复下载",
-						duration: 5000,
-						offset: 50,
-						type: "error"
-					});
-					return;
-				}else{
-					continue;
-				}
-			};
-			this.$notify({
-				title: "温馨提示",
-				message: "开始下载\n"+key,
-				duration: 5000,
-				offset: 50,
-				type: "info"
-			});
-			this.$set(renameobj,'isActive',true);
-			this.$set(renameobj,'percent2',0);
-			this.$set(renameobj,'isdownloadPaused',false);
-			this.$set(renameobj,'start',0)
-			var num = this.downloadnum[index2].num -1;
-			console.log('num',num);
-			if(num>0){
-				renameobj.name=renameobj.Key+'('+num+')';	//在下载列表中的名字
-			}else{
-				renameobj.name=renameobj.Key
-			}
-			this.downloadlist.push(renameobj);
-			console.log(this.downloadlist);
-			//开始下载
-			var baseSize= 10*1024*1024;
-			if(size>baseSize){
-				this.downloadBigobj(bucket, size, renameobj.name);
-			}else{
-				this.downloadObj(bucket, renameobj.name);
-			}
+		getDownloadname(scope){
+			var name = scope.row.Key;
+			return name;
 		},
-		downloadObj(bucket, name){
-			var key = '';
-			var index = 0;
-			for(var i=0;i<this.downloadlist.length;i++){
-				if(this.downloadlist[i].name == name){
-					index = i;
-					key = this.downloadlist[i].Key
-					break;
-				}
-			}
-			function fn3(callback){
-				getObject(bucket, key).then(function(value){
-				callback(value);
-				})
-			};
-			fn3(value =>{
-				var content = value;
-				if(value == 0){
-					this.$notify({
-						title: "温馨提示",
-						message: key+"\n下载失败",
-						duration: 5000,
-						offset: 50,
-						type: "error"
-					});
-					var index0 = 0;
-					for(var i=0;i<this.downloadlist.length;i++){
-						if(this.downloadlist[i].name == name){
-							index0 = i;
-							break;
-						}
-					}
-					this.cancelDownload(this.downloadlist[index0]);
-				}else{
-					var blob = new Blob([content], {type:"stream"})
-					console.log("blob", blob);
-					var saveData = (function(blob, key) {
-						var a = document.createElement("a");
-						document.body.appendChild(a);
-						a.style = "display: none";
-						return function (blob, key) {
-							var url = window.URL.createObjectURL(blob);
-							a.href = url;
-							a.download = key;
-							a.click();
-							window.URL.revokeObjectURL(url);
-						};
-					}());				
-					var index1 = 0;
-					for(var i=0;i<this.downloadlist.length;i++){
-						if(this.downloadlist[i].name == name){
-							index1 = i;
-							break;
-						}
-					}
-					if(this.downloadlist[index1].isActive == true){
-						saveData(blob, key);
-						this.downloadlist[index1].percent2 = 100;
-						this.$notify({
-							title: "温馨提示",
-							message: key+"\n下载成功",
-							duration: 5000,
-							offset: 50,
-							type: "success"
-						});
-					}
-				}
-			})					
+		getHref(scope){
+			var href = this.$store.state.interfaceIp + '/' + this.bucketName + '/' + scope.row.Key;
+			return href; 
 		},
-		//分片下载大文件
-		async downloadBigobj(bucket, size, name){
-			var sliceSize= 10*1024*1024;
-			var slice = Math.ceil(size/sliceSize);
-			var content = new Uint8Array([]);
-			var range = "";
-			for(var i=0;i<=slice-1;i++){
-				var key = '';
-				var index = 0;
-				for(var j=0;j<this.downloadlist.length;j++){
-					if(this.downloadlist[j].name == name){
-						index = j;
-						key = this.downloadlist[j].Key
-						break;
-					}
-				}
-				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
-					var start = i*sliceSize;
-					var end = start + sliceSize -1;
-					this.downloadlist[index].start = i*sliceSize;
-					range = "bytes=" + start + "-" + end;
-					var part = await getObject(bucket, key, range);
-					if(part == 0){
-						this.$notify({
-							title: "温馨提示",
-							message: key+"\n下载失败",
-							duration: 5000,
-							offset: 50,
-							type: "error"
-						});
-						this.cancelDownload(this.downloadlist[index]);
-						break;
-					}else{
-						let buffer = Buffer.from(part);
-						let buff = Buffer.from(content);
-						content = Buffer.concat([buff,buffer]);
-						//异步操作后重新获取下载内容的index
-						var index2 = 0;
-						for(var k=0;k<this.downloadlist.length;k++){
-							if(this.downloadlist[k].name == name){
-								index2 = k;
-								key = this.downloadlist[k].Key
-								break;
-							}
-						}
-						this.downloadlist[index2].percent2 = (i+1)/slice*100;
-						console.log(this.downloadlist[index2].percent2);				
-					}					
-				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
-					if(this.downloadtemp.length==0){
-						var temp ={
-							Name:name,
-							Content:content,
-						}
-						this.downloadtemp.push(temp);
-						console.log("缓存1",name,temp.Content);
-					}else{
-						for(var i=0;i<this.downloadtemp.length;i++){
-							if(this.downloadtemp[i].Name == name){
-								this.downloadtemp[i].Content = content;
-								console.log("缓存2",name,this.downloadtemp[i].Content);
-								break;
-							}else{
-									var temp ={
-									Name:name,
-									Content:content,
-								}
-								this.downloadtemp.push(temp);
-								console.log("缓存3",name,temp.Content);
-								break;
-							}
-						}	
-					}
-					console.log("stop");
-					break;					
-				}else{
-					break;
-				}				
-			}
-			//异步操作后重新获取下载内容的index
-				var index3 = 0;
-				for(var h=0;h<this.downloadlist.length;h++){
-					if(this.downloadlist[h].name == name){
-						index3 = h;
-						key = this.downloadlist[h].Key
-						break;
-					}
-				}
-			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
-				console.log("content", content);
-				var blob = new Blob([content]);
-				var saveData = (function(blob, key) {
-					var a = document.createElement("a");
-					document.body.appendChild(a);
-					a.style = "display: none";
-					return function (blob, key) {
-						var url = window.URL.createObjectURL(blob);
-						a.href = url;
-						a.download = key;
-						a.click();
-						window.URL.revokeObjectURL(url);
-					};
-				}());
-				saveData(blob, key);
-				this.$notify({
-					title: "温馨提示",
-					message: key+"\n下载成功",
-					duration: 5000,
-					offset: 50,
-					type: "success"
-				});
-			}
-		},
-		//暂停下载
-		pauseDownload(download){
-			var index = 0;
-			for(var i=0;i<this.downloadlist.length;i++){
-				if(this.downloadlist[i].name == download.name){
-					index = i;
-					break;
-				}
-			}
-			var range = "bytes=" + download.start + "-" + (download.start+10*1024*1024-1);
-			abortDownload(download.Bucket, download.Key, range);
-			this.downloadlist[index].isdownloadPaused = true;
-		},
-		//继续下载
-		async continueDownload(download){
-			var index = 0;
-			for(var i=0;i<this.downloadlist.length;i++){
-				if(this.downloadlist[i].name == download.name){
-					index = i;
-					break;
-				}
-			}
-			this.downloadlist[index].isdownloadPaused = false;
-			var sliceSize= 10*1024*1024;
-			var slice = Math.ceil(this.downloadlist[index].Size/sliceSize);
-			//获取缓存的index
-			var index1 = 0;
-			for(var i=0;i<this.downloadtemp.length;i++){
-				if(this.downloadtemp[i].Name == download.name){
-					index1 = i;
-					console.log('index1',index1);
-					break;
-				}
-			}
-			var content = this.downloadtemp[index1].Content;
-			console.log('继续 缓存1',download.name,content);
-			var range = "";
-			var begin = Math.ceil(slice*(this.downloadlist[index].percent2/100));
-			console.log("begin",begin);
-			for(var i=begin;i<=slice-1;i++){
-				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
-					var start = i*sliceSize;
-					var end = start + sliceSize -1;
-					this.downloadlist[index].start = i*sliceSize
-					range = "bytes=" + start + "-" + end;
-					console.log(range);
-					var part = await getObject(download.Bucket, download.Key, range);
-					if(part == 0){
-						this.$notify({
-							title: "温馨提示",
-							message: key+"\n下载失败",
-							duration: 5000,
-							offset: 50,
-							type: "error"
-						});
-						this.cancelDownload(this.downloadlist[index]);
-						break;
-					}else{
-						let buffer = Buffer.from(part);
-						let buff = Buffer.from(content);
-						content = Buffer.concat([buff,buffer]);
-						//异步操作后重新获取下载内容的index
-						var index2 = 0;
-						for(var k=0;k<this.downloadlist.length;k++){
-							if(this.downloadlist[k].name == download.name){
-								index2 = k;
-								break;
-							}
-						}
-						this.downloadlist[index2].percent2 = (i+1)/slice*100;
-						console.log(this.downloadlist[index2].percent2);
-					}				
-				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
-					for(var i=0;i<this.downloadtemp.length;i++){
-						if(this.downloadtemp[i].Name == download.name){
-							this.downloadtemp[i].Content = content;
-							console.log('继续 缓存2',download.name,this.downloadtemp[i].Content);
-							break;
-						}
-					}
-					break;
-				}else{
-					break;
-				}				
-			}
-			//异步操作后重新获取下载内容的index
-			var index3 = 0;
-			for(var h=0;h<this.downloadlist.length;h++){
-				if(this.downloadlist[h].name == download.name){
-					index3 = h;
-					break;
-				}
-			}
-			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
-				console.log("content", content);
-				var blob = new Blob([content]);
-				var key = download.Key;
-				var saveData = (function(blob, key) {
-					var a = document.createElement("a");
-					document.body.appendChild(a);
-					a.style = "display: none";
-					return function (blob, key) {
-						var url = window.URL.createObjectURL(blob);
-						a.href = url;
-						a.download = key;
-						a.click();
-						window.URL.revokeObjectURL(url);
-					};
-				}());
-				saveData(blob, key);				
-				this.$notify({
-					title: "温馨提示",
-					message: key+"\n下载成功",
-					duration: 5000,
-					offset: 50,
-					type: "success"
-				});			
-			}
-		},
-		// downloadThrottle(download){
-		// 	console.log("test")
-		// 	var pre = 0;
-		// 	var now = Date.now();
-		// 	if(now-pre>=1500){
-		// 		this.continueDownload(download);
-		// 		pre = Date.now();
+		// handleDownload(scope){
+		// 	console.log("下载",scope.row.Key);
+		// 	var bucket = this.$data.bucketName;
+		// 	//this.loadObjects(bucket);		//防止下载列表名称变化，原理未解决
+		// 	var key = scope.row.Key;
+		// 	var size = scope.row.Size;
+		// 	//重复下载计数表
+		// 	if(this.downloadnum.length==0){
+		// 		var a ={
+		// 			Key:key,
+		// 			num:1,
+		// 		}
+		// 		this.downloadnum.push(a);
+		// 	}else{
+		// 		for(var i=0;i<this.downloadnum.length;i++){
+		// 			if(this.downloadnum[i].Key == key){
+		// 				this.downloadnum[i].num += 1;
+		// 				break;
+		// 			}else{
+		// 				var a ={
+		// 					Key:key,
+		// 					num:1,
+		// 				}
+		// 				this.downloadnum.push(a);
+		// 			}
+		// 		}	
+		// 	}		
+		// 	//处理重复下载情况
+		// 	var index = 0;
+		// 	for(var i=0;i<this.objects.length;i++){
+		// 		if(this.objects[i].Key == key){
+		// 			index = i;
+		// 			break;
+		// 		}
+		// 	}
+		// 	var index2 = 0;
+		// 	for(var i=0;i<this.downloadnum.length;i++){
+		// 		if(this.downloadnum[i].Key == key){
+		// 			index2 = i;
+		// 			break;
+		// 		}
+		// 	}
+		// 	var renameobj = this.objects[index];
+		// 	for(var i=0;i<this.downloadlist.length;i++){
+		// 		if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.Key == this.downloadlist[i].Key){
+		// 			this.$notify({
+		// 				title: "温馨提示",
+		// 				message: key+"\n已在下载列表中，请勿重复下载",
+		// 				duration: 5000,
+		// 				offset: 50,
+		// 				type: "error"
+		// 			});
+		// 			return;
+		// 		}else{
+		// 			continue;
+		// 		}
+		// 	};
+		// 	this.$notify({
+		// 		title: "温馨提示",
+		// 		message: "开始下载\n"+key,
+		// 		duration: 5000,
+		// 		offset: 50,
+		// 		type: "info"
+		// 	});
+		// 	this.$set(renameobj,'isActive',true);
+		// 	this.$set(renameobj,'percent2',0);
+		// 	this.$set(renameobj,'isdownloadPaused',false);
+		// 	this.$set(renameobj,'start',0)
+		// 	var num = this.downloadnum[index2].num -1;
+		// 	console.log('num',num);
+		// 	if(num>0){
+		// 		renameobj.name=renameobj.Key+'('+num+')';	//在下载列表中的名字
+		// 	}else{
+		// 		renameobj.name=renameobj.Key
+		// 	}
+		// 	this.downloadlist.push(renameobj);
+		// 	console.log(this.downloadlist);
+
+
+		// 	var a = document.createElement("a");
+		// 	//document.body.appendChild(a);
+		// 	a.style = "display: none";
+		// 	a.href = this.$store.state.interfaceIp + '/' + bucket + '/' + key;
+		// 	a.download = key;
+		// 	a.click();
+
+
+		// 	//开始下载
+		// 	// var baseSize= 10*1024*1024;
+		// 	// if(size>baseSize){
+		// 	// 	this.downloadBigobj(bucket, size, renameobj.name);
+		// 	// }else{
+		// 	// 	this.downloadObj(bucket, renameobj.name);
+		// 	// }
+		// },
+		// downloadObj(bucket, name){
+		// 	var key = '';
+		// 	var index = 0;
+		// 	for(var i=0;i<this.downloadlist.length;i++){
+		// 		if(this.downloadlist[i].name == name){
+		// 			index = i;
+		// 			key = this.downloadlist[i].Key
+		// 			break;
+		// 		}
+		// 	}
+		// 	function fn3(callback){
+		// 		getObject(bucket, key).then(function(value){
+		// 		callback(value);
+		// 		})
+		// 	};
+		// 	fn3(value =>{
+		// 		var content = value;
+		// 		if(value == 0){
+		// 			this.$notify({
+		// 				title: "温馨提示",
+		// 				message: key+"\n下载失败",
+		// 				duration: 5000,
+		// 				offset: 50,
+		// 				type: "error"
+		// 			});
+		// 			var index0 = 0;
+		// 			for(var i=0;i<this.downloadlist.length;i++){
+		// 				if(this.downloadlist[i].name == name){
+		// 					index0 = i;
+		// 					break;
+		// 				}
+		// 			}
+		// 			this.cancelDownload(this.downloadlist[index0]);
+		// 		}else{
+		// 			var blob = new Blob([content], {type:"stream"})
+		// 			console.log("blob", blob);
+		// 			var saveData = (function(blob, key) {
+		// 				var a = document.createElement("a");
+		// 				document.body.appendChild(a);
+		// 				a.style = "display: none";
+		// 				return function (blob, key) {
+		// 					var url = window.URL.createObjectURL(blob);
+		// 					a.href = url;
+		// 					a.download = key;
+		// 					a.click();
+		// 					window.URL.revokeObjectURL(url);
+		// 				};
+		// 			}());				
+		// 			var index1 = 0;
+		// 			for(var i=0;i<this.downloadlist.length;i++){
+		// 				if(this.downloadlist[i].name == name){
+		// 					index1 = i;
+		// 					break;
+		// 				}
+		// 			}
+		// 			if(this.downloadlist[index1].isActive == true){
+		// 				saveData(blob, key);
+		// 				this.downloadlist[index1].percent2 = 100;
+		// 				this.$notify({
+		// 					title: "温馨提示",
+		// 					message: key+"\n下载成功",
+		// 					duration: 5000,
+		// 					offset: 50,
+		// 					type: "success"
+		// 				});
+		// 			}
+		// 		}
+		// 	})					
+		// },
+		// //分片下载大文件
+		// async downloadBigobj(bucket, size, name){
+		// 	var sliceSize= 10*1024*1024;
+		// 	var slice = Math.ceil(size/sliceSize);
+		// 	var content = new Uint8Array([]);
+		// 	var range = "";
+		// 	for(var i=0;i<=slice-1;i++){
+		// 		var key = '';
+		// 		var index = 0;
+		// 		for(var j=0;j<this.downloadlist.length;j++){
+		// 			if(this.downloadlist[j].name == name){
+		// 				index = j;
+		// 				key = this.downloadlist[j].Key
+		// 				break;
+		// 			}
+		// 		}
+		// 		if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
+		// 			var start = i*sliceSize;
+		// 			var end = start + sliceSize -1;
+		// 			this.downloadlist[index].start = i*sliceSize;
+		// 			range = "bytes=" + start + "-" + end;
+		// 			var part = await getObject(bucket, key, range);
+		// 			if(part == 0){
+		// 				this.$notify({
+		// 					title: "温馨提示",
+		// 					message: key+"\n下载失败",
+		// 					duration: 5000,
+		// 					offset: 50,
+		// 					type: "error"
+		// 				});
+		// 				this.cancelDownload(this.downloadlist[index]);
+		// 				break;
+		// 			}else{
+		// 				let buffer = Buffer.from(part);
+		// 				let buff = Buffer.from(content);
+		// 				content = Buffer.concat([buff,buffer]);
+		// 				//异步操作后重新获取下载内容的index
+		// 				var index2 = 0;
+		// 				for(var k=0;k<this.downloadlist.length;k++){
+		// 					if(this.downloadlist[k].name == name){
+		// 						index2 = k;
+		// 						key = this.downloadlist[k].Key
+		// 						break;
+		// 					}
+		// 				}
+		// 				this.downloadlist[index2].percent2 = (i+1)/slice*100;
+		// 				console.log(this.downloadlist[index2].percent2);				
+		// 			}					
+		// 		}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+		// 			if(this.downloadtemp.length==0){
+		// 				var temp ={
+		// 					Name:name,
+		// 					Content:content,
+		// 				}
+		// 				this.downloadtemp.push(temp);
+		// 				console.log("缓存1",name,temp.Content);
+		// 			}else{
+		// 				for(var i=0;i<this.downloadtemp.length;i++){
+		// 					if(this.downloadtemp[i].Name == name){
+		// 						this.downloadtemp[i].Content = content;
+		// 						console.log("缓存2",name,this.downloadtemp[i].Content);
+		// 						break;
+		// 					}else{
+		// 							var temp ={
+		// 							Name:name,
+		// 							Content:content,
+		// 						}
+		// 						this.downloadtemp.push(temp);
+		// 						console.log("缓存3",name,temp.Content);
+		// 						break;
+		// 					}
+		// 				}	
+		// 			}
+		// 			console.log("stop");
+		// 			break;					
+		// 		}else{
+		// 			break;
+		// 		}				
+		// 	}
+		// 	//异步操作后重新获取下载内容的index
+		// 		var index3 = 0;
+		// 		for(var h=0;h<this.downloadlist.length;h++){
+		// 			if(this.downloadlist[h].name == name){
+		// 				index3 = h;
+		// 				key = this.downloadlist[h].Key
+		// 				break;
+		// 			}
+		// 		}
+		// 	if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
+		// 		console.log("content", content);
+		// 		var blob = new Blob([content]);
+		// 		var saveData = (function(blob, key) {
+		// 			var a = document.createElement("a");
+		// 			document.body.appendChild(a);
+		// 			a.style = "display: none";
+		// 			return function (blob, key) {
+		// 				var url = window.URL.createObjectURL(blob);
+		// 				a.href = url;
+		// 				a.download = key;
+		// 				a.click();
+		// 				window.URL.revokeObjectURL(url);
+		// 			};
+		// 		}());
+		// 		saveData(blob, key);
+		// 		this.$notify({
+		// 			title: "温馨提示",
+		// 			message: key+"\n下载成功",
+		// 			duration: 5000,
+		// 			offset: 50,
+		// 			type: "success"
+		// 		});
 		// 	}
 		// },
-		//取消下载
-		cancelDownload(download){
-			if(download.Size<10*1024*1024){
-				abortDownload(download.Bucket, download.Key);
-			}
-			var index = 0;
-			for(var i=0;i<this.downloadlist.length;i++){
-				if(this.downloadlist[i].name == download.name){
-					console.log(this.downloadlist[i].name);
-					index = i;
-					break;
-				}
-			};
-			this.downloadlist[index].isActive = false;			
-			this.downloadlist.splice(index,1);
-			//清空缓存
-			if(this.downloadlist.length==0){
-				this.downloadnum=[];
-				this.downloadtemp = [];
-			}
-		},
+		// //暂停下载
+		// pauseDownload(download){
+		// 	var index = 0;
+		// 	for(var i=0;i<this.downloadlist.length;i++){
+		// 		if(this.downloadlist[i].name == download.name){
+		// 			index = i;
+		// 			break;
+		// 		}
+		// 	}
+		// 	var range = "bytes=" + download.start + "-" + (download.start+10*1024*1024-1);
+		// 	abortDownload(download.Bucket, download.Key, range);
+		// 	this.downloadlist[index].isdownloadPaused = true;
+		// },
+		// //继续下载
+		// async continueDownload(download){
+		// 	var index = 0;
+		// 	for(var i=0;i<this.downloadlist.length;i++){
+		// 		if(this.downloadlist[i].name == download.name){
+		// 			index = i;
+		// 			break;
+		// 		}
+		// 	}
+		// 	this.downloadlist[index].isdownloadPaused = false;
+		// 	var sliceSize= 10*1024*1024;
+		// 	var slice = Math.ceil(this.downloadlist[index].Size/sliceSize);
+		// 	//获取缓存的index
+		// 	var index1 = 0;
+		// 	for(var i=0;i<this.downloadtemp.length;i++){
+		// 		if(this.downloadtemp[i].Name == download.name){
+		// 			index1 = i;
+		// 			console.log('index1',index1);
+		// 			break;
+		// 		}
+		// 	}
+		// 	var content = this.downloadtemp[index1].Content;
+		// 	console.log('继续 缓存1',download.name,content);
+		// 	var range = "";
+		// 	var begin = Math.ceil(slice*(this.downloadlist[index].percent2/100));
+		// 	console.log("begin",begin);
+		// 	for(var i=begin;i<=slice-1;i++){
+		// 		if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
+		// 			var start = i*sliceSize;
+		// 			var end = start + sliceSize -1;
+		// 			this.downloadlist[index].start = i*sliceSize
+		// 			range = "bytes=" + start + "-" + end;
+		// 			console.log(range);
+		// 			var part = await getObject(download.Bucket, download.Key, range);
+		// 			if(part == 0){
+		// 				this.$notify({
+		// 					title: "温馨提示",
+		// 					message: key+"\n下载失败",
+		// 					duration: 5000,
+		// 					offset: 50,
+		// 					type: "error"
+		// 				});
+		// 				this.cancelDownload(this.downloadlist[index]);
+		// 				break;
+		// 			}else{
+		// 				let buffer = Buffer.from(part);
+		// 				let buff = Buffer.from(content);
+		// 				content = Buffer.concat([buff,buffer]);
+		// 				//异步操作后重新获取下载内容的index
+		// 				var index2 = 0;
+		// 				for(var k=0;k<this.downloadlist.length;k++){
+		// 					if(this.downloadlist[k].name == download.name){
+		// 						index2 = k;
+		// 						break;
+		// 					}
+		// 				}
+		// 				this.downloadlist[index2].percent2 = (i+1)/slice*100;
+		// 				console.log(this.downloadlist[index2].percent2);
+		// 			}				
+		// 		}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+		// 			for(var i=0;i<this.downloadtemp.length;i++){
+		// 				if(this.downloadtemp[i].Name == download.name){
+		// 					this.downloadtemp[i].Content = content;
+		// 					console.log('继续 缓存2',download.name,this.downloadtemp[i].Content);
+		// 					break;
+		// 				}
+		// 			}
+		// 			break;
+		// 		}else{
+		// 			break;
+		// 		}				
+		// 	}
+		// 	//异步操作后重新获取下载内容的index
+		// 	var index3 = 0;
+		// 	for(var h=0;h<this.downloadlist.length;h++){
+		// 		if(this.downloadlist[h].name == download.name){
+		// 			index3 = h;
+		// 			break;
+		// 		}
+		// 	}
+		// 	if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
+		// 		console.log("content", content);
+		// 		var blob = new Blob([content]);
+		// 		var key = download.Key;
+		// 		var saveData = (function(blob, key) {
+		// 			var a = document.createElement("a");
+		// 			document.body.appendChild(a);
+		// 			a.style = "display: none";
+		// 			return function (blob, key) {
+		// 				var url = window.URL.createObjectURL(blob);
+		// 				a.href = url;
+		// 				a.download = key;
+		// 				a.click();
+		// 				window.URL.revokeObjectURL(url);
+		// 			};
+		// 		}());
+		// 		saveData(blob, key);				
+		// 		this.$notify({
+		// 			title: "温馨提示",
+		// 			message: key+"\n下载成功",
+		// 			duration: 5000,
+		// 			offset: 50,
+		// 			type: "success"
+		// 		});			
+		// 	}
+		// },
+		// //取消下载
+		// cancelDownload(download){
+		// 	if(download.Size<10*1024*1024){
+		// 		abortDownload(download.Bucket, download.Key);
+		// 	}
+		// 	var index = 0;
+		// 	for(var i=0;i<this.downloadlist.length;i++){
+		// 		if(this.downloadlist[i].name == download.name){
+		// 			console.log(this.downloadlist[i].name);
+		// 			index = i;
+		// 			break;
+		// 		}
+		// 	};
+		// 	this.downloadlist[index].isActive = false;			
+		// 	this.downloadlist.splice(index,1);
+		// 	//清空缓存
+		// 	if(this.downloadlist.length==0){
+		// 		this.downloadnum=[];
+		// 		this.downloadtemp = [];
+		// 	}
+		// },
+
 		//文件详情
 		handleInfo(scope){
 			this.$data.detaildrawer = true;
