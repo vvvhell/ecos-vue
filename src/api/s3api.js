@@ -1,5 +1,4 @@
 import store from '../store/index'
-import { call } from 'file-loader';
 
 
 var AWS = require("aws-sdk");
