@@ -71,7 +71,8 @@
       </div>
       <div slot="footer" class="dialog-footer" style="text-align: center">
         <el-button @click="registerFormVisible = false">返 回</el-button>
-        <el-button type="primary" @click="handleRegUserInfo">提交并进行身份信息采集</el-button>
+        <!-- <el-button type="primary" @click="handleRegUserInfo">提交并进行身份信息采集</el-button> -->
+        <el-button type="primary" @click="handleCompleteReg">提交并进行身份信息采集</el-button>
       </div>
     </el-dialog>
 
@@ -429,9 +430,10 @@ export default {
       }
     },
     //用于测试点击直接跳转控制台
-    handleLogin1(){
+    async handleLogin1(){
       this.loginFormVisible = false;
-      this.$store.dispatch('loginAct','测试用户');
+      InitAWS(this.$store.state.interfaceIp);
+      this.$store.dispatch('loginAct',this.loginForm.username);
       this.$router.replace({path:'/Console/'+this.$store.state.username});      
     },
     //轮询登录信息

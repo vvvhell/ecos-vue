@@ -28,7 +28,7 @@
 						background-color="#99CCFF"
 						text-color="#322A54"
 						active-text-color="#fff">
-						<el-menu-item index="1" v-on:click="openOverview">
+						<el-menu-item index="1" v-on:click="openOverview" :disabled="overviewDisabled">
 							<i class="el-icon-view"></i>
 							<span slot="title">概览</span>					
 						</el-menu-item>
@@ -46,6 +46,7 @@
 											placeholder="请输入Bucket名称"
 											prefix-icon="el-icon-search"
 											:fetch-suggestions="querySearch"
+											:disabled="overviewDisabled"
 											@select="handleSelect"></el-autocomplete>
 								</el-menu-item>							
 								<el-menu-item class="bucketList" v-for="(bucket) in buckets" v-bind:key="bucket.Name" :disabled='getting(bucket)' @click="handleJump(bucket)" v-on:click="openDetail">									
@@ -57,10 +58,10 @@
 							<i class="el-icon-upload2"></i>
 							<span slot="title">上传列表</span>					
 						</el-menu-item>
-						<!-- <el-menu-item index="4" v-on:click="openDownloadlist">
+						<el-menu-item index="4" v-on:click="openDownloadlist">
 							<i class="el-icon-download"></i>
 							<span slot="title">下载列表</span>					
-						</el-menu-item>												 -->
+						</el-menu-item>												
 					</el-menu>
 				</el-aside>
 
@@ -129,9 +130,10 @@
 										<template slot-scope="scope">											
 											<el-button
 												type="primary"
-												size="mini">
-												<!-- @click="handleDownload(scope)"> -->
-												<a :href="getHref(scope)" :download="getDownloadname(scope)" target="_blank" style='text-decoration:none;color:white' type="video">下载</a></el-button>
+												size="mini"
+												@click="handleDownload(scope)">下载
+												<!-- <a :href="getHref(scope)" :download="getDownloadname(scope)" target="_blank" style='text-decoration:none;color:white' type="video">下载</a> -->
+											</el-button>
 											<el-button 
 												type="info"
 												size="mini"
@@ -169,7 +171,7 @@
 					  </el-card>
 					  </template>
 
-						<!-- <template v-for="(download) in downloadlist">
+						<template v-for="(download) in downloadlist">
 						<el-card class="downloadlist" v-show="downloadlistvisible" v-bind:key="download.name" v-if="download.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{download.name}}</span>
@@ -185,7 +187,7 @@
 								</div>
 							</div>							
 					  </el-card>
-						</template> -->
+						</template>
 
 					</el-main>
           
@@ -224,7 +226,7 @@
 							<el-input placeholder="请输入创建的Bucket名称" v-model='newBucketName' :clearable="true"></el-input>
 						</div>
 						<div class="drawer-title">权限控制</div>
-						<el-select v-model="BucketAcl" placeholder="请选择" style="width:90%">
+						<el-select v-model="Acl" placeholder="请选择" style="width:90%" @change="selectAcl()">
 							<el-option
 								v-for="item in options"
 								:key="item.value"
@@ -251,7 +253,6 @@
 							action="doUpload" 
 							multiple
 							:show-file-list="false"
-							:before-upload="beforeUpload"
 							:auto-upload="false"
 							:on-change="onUploadChange"
 							style="text-align:center">
@@ -261,7 +262,7 @@
 							<div slot="tip" class="el-upload__tip">选择的文件将自动开始上传</div>
 						</el-upload>
 						<div class="drawer-title" style="text-align:center"><div style="margin-bottom:20px">权限控制</div>
-							<el-select v-model="BucketAcl" placeholder="请选择" style="width:40%">
+							<el-select v-model="Acl" placeholder="请选择" style="width:40%" @change="selectAcl()">
 							<el-option
 								v-for="item in options"
 								:key="item.value"
@@ -288,7 +289,7 @@ import '../api/s3api'
 import '../assets/iconfont'
 import router from 'vue-router'
 import {throttle} from 'lodash'
-import { listBuckets, createBucket, listObjects, abortlist, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, abortDownload, createUser, createKey, ConfigKey, InitAWS } from '../api/s3api';
+import { listBuckets, createBucket, listObjects, abortlist, deleteBucket, deleteObject, getObject, putObject, getUploadID, uploadPart, uploadedParts, completeUpload, abortUpload, listMultipartUploads, createUser, createKey, ConfigKey, InitAWS } from '../api/s3api';
 export default {
   data() {
 
@@ -302,6 +303,7 @@ export default {
 			fileNum: 0,
 			newBucketName:"",
 			showOverviewdata: false,
+			overviewDisabled: false,
 
 			drawer: false,
 			createdrawer: false,
@@ -338,19 +340,19 @@ export default {
 
 			options:[
 				{
-					value:'私有',
+					value:'private',
 					label:'私有'
 				},
 				{
-					value:'公有',
-					label:'允许所有用户读取'
+					value:'public-read',
+					label:'所有用户只读'
 				},
 				{
-					value:'公有读写',
-					label:'允许所有用户读取和写入'
+					value:'public-read-write',
+					label:'所有用户读写'
 				},
 			],
-			BucketAcl:'',
+			Acl:'',
 
 			customColors: [
 				{color: '#f56c6c', percentage: 20},
@@ -616,11 +618,19 @@ export default {
 					}
 				}
 				if(existed == 0){
-					console.log("创建bucket");
-					this.$data.createdrawer = false;
-					this.buildBucket(this.newBucketName);					
+					if(this.Acl == ''){
+						this.$notify({
+							title: "温馨提示",
+							message: "请选择Bucket权限",
+							duration: 2000,
+							offset: 300,
+							type: "warning"
+						});
+					}else{
+						this.$data.createdrawer = false;
+						this.buildBucket(this.newBucketName, this.Acl);
+					}					
 				}else{
-					console.log("Bucket已存在");
 						this.$notify({
 							title: "温馨提示",
 							message: "Bucket名称已存在",
@@ -640,9 +650,9 @@ export default {
 						});
 			}
 		},
-		buildBucket(name){
+		buildBucket(name, acl){
 			function fn4(callback){
-				createBucket(name).then(function(value){
+				createBucket(name, acl).then(function(value){
 					callback(value);
 				});
 			};
@@ -668,6 +678,11 @@ export default {
 					});
 				}
 			})
+		},
+
+		//权限控制选项
+		selectAcl(){
+			console.log(this.Acl);
 		},
 
 		//搜索框功能
@@ -696,18 +711,24 @@ export default {
 
 		//删除bucket
 		async handleDeleteBucket(){
+			this.overviewDisabled = true;
 			for(var i=0;i<this.bucketNum;i++){
-				if(this.buckets[i].Name == this.bucketName){
-					this.buckets[i].getting = true;
-				}
+				this.buckets[i].getting = true;
 			};
 			console.log("delete",this.bucketName, this.objectNum);
 			//object数量不为0
 			if(this.objectNum != 0){				
 				await this.deleteAll();
 				await this.deleteUpload();
+				for(var i=0;i<this.bucketNum;i++){
+					if(this.buckets[i].Name == this.bucketName){
+						this.buckets[i].getting = false;
+					}
+				};
+				this.overviewDisabled = false;
 			}else{		//object数量为0
 				await this.deleteUpload();
+				this.overviewDisabled = false;
 			}
 		},
 		//删除未完成上传的分片
@@ -784,6 +805,16 @@ export default {
 		},
 		//选择文件并上传
 		onUploadChange(file){
+			if(this.Acl == ''){
+				this.$notify({
+					title: "温馨提示",
+					message: "请先选择文件权限",
+					duration: 5000,
+					offset: 50,
+					type: "error"
+				})
+				return;
+			};
 			console.log("文件：", file);
 			this.file = file.raw;
 			this.fileName = file.raw.name;
@@ -818,20 +849,20 @@ export default {
 					continue;
 				}
 			}
-			// for(var i=0;i<this.downloadlist.length;i++){
-			// 	if(tempobj.Bucket == this.downloadlist[i].Bucket && tempobj.key == this.downloadlist[i].Key){
-			// 		this.$notify({
-			// 			title: "温馨提示",
-			// 			message: key+"\n正在下载中，请勿上传同名文件",
-			// 			duration: 5000,
-			// 			offset: 50,
-			// 			type: "error"
-			// 		});
-			// 		return;
-			// 	}else{
-			// 		continue;
-			// 	}
-			// }
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(tempobj.Bucket == this.downloadlist[i].Bucket && tempobj.key == this.downloadlist[i].Key){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n正在下载中，请勿上传同名文件",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					return;
+				}else{
+					continue;
+				}
+			}
 			if(this.uploadlist.length>0){
 				var num = 0;
 				for(var i=0;i<this.uploadlist.length;i++){
@@ -861,7 +892,7 @@ export default {
 				var blob = new Blob([this.result]);
 				//小于15MB的文件
 				if(size<15*1024*1024){
-					var msg = await putObject(blob, name, key);
+					var msg = await putObject(blob, name, key, that.Acl);
 					if(msg != 0){
 						that.$notify({
 							title: "温馨提示",
@@ -905,7 +936,7 @@ export default {
 		},
 		//分片上传大文件
 		async putBigobj(blob, name, key, size, Key){
-			var uploadID = await getUploadID(name, key);
+			var uploadID = await getUploadID(name, key, this.Acl);
 			if(uploadID == 0){
 				this.$notify({
 					title: "温馨提示",
@@ -1174,11 +1205,6 @@ export default {
 				}				
 			}		
 		},
-
-		beforeUpload(file){
-			this.file = file;
-			this.fileName = file.name;			
-		},
 		submitUpload(){
 			console.log("上传：", this.fileName);
 			if(this.fileName == undefined){
@@ -1199,442 +1225,430 @@ export default {
 					break;
 				}
 			};
-			this.uploadlist[index].isActive = false;
-			this.uploadlist.splice(index,1);			
+			this.uploadlist[index].isActive = false;			
 			if(this.uploadlist[index].Size >= 15*1024*1024){				
 				let bucket = upload.Bucket;
 				let key = upload.key;
 				let uploadId = upload.UploadID;
 				await abortUpload(bucket, key, uploadId);								
-			}
+			};
+			this.uploadlist.splice(index,1);
 		},
 
 		//下载文件
-		getDownloadname(scope){
-			var name = scope.row.Key;
-			return name;
+		//使用a标签下载
+		// getDownloadname(scope){
+		// 	var name = scope.row.Key;
+		// 	return name;
+		// },
+		// getHref(scope){
+		// 	var href = this.$store.state.interfaceIp + '/' + this.bucketName + '/' + scope.row.Key;
+		// 	return href; 
+		// },
+		//不使用a标签下载
+		handleDownload(scope){
+			console.log("下载",scope.row.Key);
+			var bucket = this.$data.bucketName;
+			//this.loadObjects(bucket);		//防止下载列表名称变化，原理未解决
+			var key = scope.row.Key;
+			var size = scope.row.Size;
+			//重复下载计数表
+			if(this.downloadnum.length==0){
+				var a ={
+					Key:key,
+					num:1,
+				}
+				this.downloadnum.push(a);
+			}else{
+				for(var i=0;i<this.downloadnum.length;i++){
+					if(this.downloadnum[i].Key == key){
+						this.downloadnum[i].num += 1;
+						break;
+					}else{
+						var a ={
+							Key:key,
+							num:1,
+						}
+						this.downloadnum.push(a);
+					}
+				}	
+			}		
+			//处理重复下载情况
+			var index = 0;
+			for(var i=0;i<this.objects.length;i++){
+				if(this.objects[i].Key == key){
+					index = i;
+					break;
+				}
+			}
+			var index2 = 0;
+			for(var i=0;i<this.downloadnum.length;i++){
+				if(this.downloadnum[i].Key == key){
+					index2 = i;
+					break;
+				}
+			}
+			var renameobj = this.objects[index];
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.Key == this.downloadlist[i].Key){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n已在下载列表中，请勿重复下载",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					return;
+				}else{
+					continue;
+				}
+			};
+			this.$notify({
+				title: "温馨提示",
+				message: "开始下载\n"+key,
+				duration: 5000,
+				offset: 50,
+				type: "info"
+			});
+			this.$set(renameobj,'isActive',true);
+			this.$set(renameobj,'percent2',0);
+			this.$set(renameobj,'isdownloadPaused',false);
+			this.$set(renameobj,'start',0)
+			var num = this.downloadnum[index2].num -1;
+			console.log('num',num);
+			if(num>0){
+				renameobj.name=renameobj.Key+'('+num+')';	//在下载列表中的名字
+			}else{
+				renameobj.name=renameobj.Key
+			}
+			this.downloadlist.push(renameobj);
+			console.log(this.downloadlist);
+			//开始下载
+			var baseSize= 10*1024*1024;
+			if(size>baseSize){
+				this.downloadBigobj(bucket, size, renameobj.name);
+			}else{
+				this.downloadObj(bucket, renameobj.name);
+			}
 		},
-		getHref(scope){
-			var href = this.$store.state.interfaceIp + '/' + this.bucketName + '/' + scope.row.Key;
-			return href; 
+		downloadObj(bucket, name){
+			var key = '';
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(this.downloadlist[i].name == name){
+					index = i;
+					key = this.downloadlist[i].Key
+					break;
+				}
+			}
+			function fn3(callback){
+				getObject(bucket, key).then(function(value){
+				callback(value);
+				})
+			};
+			fn3(value =>{
+				var content = value;
+				if(value == 0){
+					this.$notify({
+						title: "温馨提示",
+						message: key+"\n下载失败",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					var index0 = 0;
+					for(var i=0;i<this.downloadlist.length;i++){
+						if(this.downloadlist[i].name == name){
+							index0 = i;
+							break;
+						}
+					}
+					this.cancelDownload(this.downloadlist[index0]);
+				}else{
+					var blob = new Blob([content], {type:"stream"})
+					console.log("blob", blob);
+					var saveData = (function(blob, key) {
+						var a = document.createElement("a");
+						document.body.appendChild(a);
+						a.style = "display: none";
+						return function (blob, key) {
+							var url = window.URL.createObjectURL(blob);
+							a.href = url;
+							a.download = key;
+							a.click();
+							window.URL.revokeObjectURL(url);
+						};
+					}());				
+					var index1 = 0;
+					for(var i=0;i<this.downloadlist.length;i++){
+						if(this.downloadlist[i].name == name){
+							index1 = i;
+							break;
+						}
+					}
+					if(this.downloadlist[index1].isActive == true){
+						saveData(blob, key);
+						this.downloadlist[index1].percent2 = 100;
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n下载成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
+					}
+				}
+			})					
 		},
-		// handleDownload(scope){
-		// 	console.log("下载",scope.row.Key);
-		// 	var bucket = this.$data.bucketName;
-		// 	//this.loadObjects(bucket);		//防止下载列表名称变化，原理未解决
-		// 	var key = scope.row.Key;
-		// 	var size = scope.row.Size;
-		// 	//重复下载计数表
-		// 	if(this.downloadnum.length==0){
-		// 		var a ={
-		// 			Key:key,
-		// 			num:1,
-		// 		}
-		// 		this.downloadnum.push(a);
-		// 	}else{
-		// 		for(var i=0;i<this.downloadnum.length;i++){
-		// 			if(this.downloadnum[i].Key == key){
-		// 				this.downloadnum[i].num += 1;
-		// 				break;
-		// 			}else{
-		// 				var a ={
-		// 					Key:key,
-		// 					num:1,
-		// 				}
-		// 				this.downloadnum.push(a);
-		// 			}
-		// 		}	
-		// 	}		
-		// 	//处理重复下载情况
-		// 	var index = 0;
-		// 	for(var i=0;i<this.objects.length;i++){
-		// 		if(this.objects[i].Key == key){
-		// 			index = i;
-		// 			break;
-		// 		}
-		// 	}
-		// 	var index2 = 0;
-		// 	for(var i=0;i<this.downloadnum.length;i++){
-		// 		if(this.downloadnum[i].Key == key){
-		// 			index2 = i;
-		// 			break;
-		// 		}
-		// 	}
-		// 	var renameobj = this.objects[index];
-		// 	for(var i=0;i<this.downloadlist.length;i++){
-		// 		if(renameobj.Bucket == this.downloadlist[i].Bucket && renameobj.Key == this.downloadlist[i].Key){
-		// 			this.$notify({
-		// 				title: "温馨提示",
-		// 				message: key+"\n已在下载列表中，请勿重复下载",
-		// 				duration: 5000,
-		// 				offset: 50,
-		// 				type: "error"
-		// 			});
-		// 			return;
-		// 		}else{
-		// 			continue;
-		// 		}
-		// 	};
-		// 	this.$notify({
-		// 		title: "温馨提示",
-		// 		message: "开始下载\n"+key,
-		// 		duration: 5000,
-		// 		offset: 50,
-		// 		type: "info"
-		// 	});
-		// 	this.$set(renameobj,'isActive',true);
-		// 	this.$set(renameobj,'percent2',0);
-		// 	this.$set(renameobj,'isdownloadPaused',false);
-		// 	this.$set(renameobj,'start',0)
-		// 	var num = this.downloadnum[index2].num -1;
-		// 	console.log('num',num);
-		// 	if(num>0){
-		// 		renameobj.name=renameobj.Key+'('+num+')';	//在下载列表中的名字
-		// 	}else{
-		// 		renameobj.name=renameobj.Key
-		// 	}
-		// 	this.downloadlist.push(renameobj);
-		// 	console.log(this.downloadlist);
-
-
-		// 	var a = document.createElement("a");
-		// 	//document.body.appendChild(a);
-		// 	a.style = "display: none";
-		// 	a.href = this.$store.state.interfaceIp + '/' + bucket + '/' + key;
-		// 	a.download = key;
-		// 	a.click();
-
-
-		// 	//开始下载
-		// 	// var baseSize= 10*1024*1024;
-		// 	// if(size>baseSize){
-		// 	// 	this.downloadBigobj(bucket, size, renameobj.name);
-		// 	// }else{
-		// 	// 	this.downloadObj(bucket, renameobj.name);
-		// 	// }
-		// },
-		// downloadObj(bucket, name){
-		// 	var key = '';
-		// 	var index = 0;
-		// 	for(var i=0;i<this.downloadlist.length;i++){
-		// 		if(this.downloadlist[i].name == name){
-		// 			index = i;
-		// 			key = this.downloadlist[i].Key
-		// 			break;
-		// 		}
-		// 	}
-		// 	function fn3(callback){
-		// 		getObject(bucket, key).then(function(value){
-		// 		callback(value);
-		// 		})
-		// 	};
-		// 	fn3(value =>{
-		// 		var content = value;
-		// 		if(value == 0){
-		// 			this.$notify({
-		// 				title: "温馨提示",
-		// 				message: key+"\n下载失败",
-		// 				duration: 5000,
-		// 				offset: 50,
-		// 				type: "error"
-		// 			});
-		// 			var index0 = 0;
-		// 			for(var i=0;i<this.downloadlist.length;i++){
-		// 				if(this.downloadlist[i].name == name){
-		// 					index0 = i;
-		// 					break;
-		// 				}
-		// 			}
-		// 			this.cancelDownload(this.downloadlist[index0]);
-		// 		}else{
-		// 			var blob = new Blob([content], {type:"stream"})
-		// 			console.log("blob", blob);
-		// 			var saveData = (function(blob, key) {
-		// 				var a = document.createElement("a");
-		// 				document.body.appendChild(a);
-		// 				a.style = "display: none";
-		// 				return function (blob, key) {
-		// 					var url = window.URL.createObjectURL(blob);
-		// 					a.href = url;
-		// 					a.download = key;
-		// 					a.click();
-		// 					window.URL.revokeObjectURL(url);
-		// 				};
-		// 			}());				
-		// 			var index1 = 0;
-		// 			for(var i=0;i<this.downloadlist.length;i++){
-		// 				if(this.downloadlist[i].name == name){
-		// 					index1 = i;
-		// 					break;
-		// 				}
-		// 			}
-		// 			if(this.downloadlist[index1].isActive == true){
-		// 				saveData(blob, key);
-		// 				this.downloadlist[index1].percent2 = 100;
-		// 				this.$notify({
-		// 					title: "温馨提示",
-		// 					message: key+"\n下载成功",
-		// 					duration: 5000,
-		// 					offset: 50,
-		// 					type: "success"
-		// 				});
-		// 			}
-		// 		}
-		// 	})					
-		// },
-		// //分片下载大文件
-		// async downloadBigobj(bucket, size, name){
-		// 	var sliceSize= 10*1024*1024;
-		// 	var slice = Math.ceil(size/sliceSize);
-		// 	var content = new Uint8Array([]);
-		// 	var range = "";
-		// 	for(var i=0;i<=slice-1;i++){
-		// 		var key = '';
-		// 		var index = 0;
-		// 		for(var j=0;j<this.downloadlist.length;j++){
-		// 			if(this.downloadlist[j].name == name){
-		// 				index = j;
-		// 				key = this.downloadlist[j].Key
-		// 				break;
-		// 			}
-		// 		}
-		// 		if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
-		// 			var start = i*sliceSize;
-		// 			var end = start + sliceSize -1;
-		// 			this.downloadlist[index].start = i*sliceSize;
-		// 			range = "bytes=" + start + "-" + end;
-		// 			var part = await getObject(bucket, key, range);
-		// 			if(part == 0){
-		// 				this.$notify({
-		// 					title: "温馨提示",
-		// 					message: key+"\n下载失败",
-		// 					duration: 5000,
-		// 					offset: 50,
-		// 					type: "error"
-		// 				});
-		// 				this.cancelDownload(this.downloadlist[index]);
-		// 				break;
-		// 			}else{
-		// 				let buffer = Buffer.from(part);
-		// 				let buff = Buffer.from(content);
-		// 				content = Buffer.concat([buff,buffer]);
-		// 				//异步操作后重新获取下载内容的index
-		// 				var index2 = 0;
-		// 				for(var k=0;k<this.downloadlist.length;k++){
-		// 					if(this.downloadlist[k].name == name){
-		// 						index2 = k;
-		// 						key = this.downloadlist[k].Key
-		// 						break;
-		// 					}
-		// 				}
-		// 				this.downloadlist[index2].percent2 = (i+1)/slice*100;
-		// 				console.log(this.downloadlist[index2].percent2);				
-		// 			}					
-		// 		}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
-		// 			if(this.downloadtemp.length==0){
-		// 				var temp ={
-		// 					Name:name,
-		// 					Content:content,
-		// 				}
-		// 				this.downloadtemp.push(temp);
-		// 				console.log("缓存1",name,temp.Content);
-		// 			}else{
-		// 				for(var i=0;i<this.downloadtemp.length;i++){
-		// 					if(this.downloadtemp[i].Name == name){
-		// 						this.downloadtemp[i].Content = content;
-		// 						console.log("缓存2",name,this.downloadtemp[i].Content);
-		// 						break;
-		// 					}else{
-		// 							var temp ={
-		// 							Name:name,
-		// 							Content:content,
-		// 						}
-		// 						this.downloadtemp.push(temp);
-		// 						console.log("缓存3",name,temp.Content);
-		// 						break;
-		// 					}
-		// 				}	
-		// 			}
-		// 			console.log("stop");
-		// 			break;					
-		// 		}else{
-		// 			break;
-		// 		}				
-		// 	}
-		// 	//异步操作后重新获取下载内容的index
-		// 		var index3 = 0;
-		// 		for(var h=0;h<this.downloadlist.length;h++){
-		// 			if(this.downloadlist[h].name == name){
-		// 				index3 = h;
-		// 				key = this.downloadlist[h].Key
-		// 				break;
-		// 			}
-		// 		}
-		// 	if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
-		// 		console.log("content", content);
-		// 		var blob = new Blob([content]);
-		// 		var saveData = (function(blob, key) {
-		// 			var a = document.createElement("a");
-		// 			document.body.appendChild(a);
-		// 			a.style = "display: none";
-		// 			return function (blob, key) {
-		// 				var url = window.URL.createObjectURL(blob);
-		// 				a.href = url;
-		// 				a.download = key;
-		// 				a.click();
-		// 				window.URL.revokeObjectURL(url);
-		// 			};
-		// 		}());
-		// 		saveData(blob, key);
-		// 		this.$notify({
-		// 			title: "温馨提示",
-		// 			message: key+"\n下载成功",
-		// 			duration: 5000,
-		// 			offset: 50,
-		// 			type: "success"
-		// 		});
-		// 	}
-		// },
-		// //暂停下载
-		// pauseDownload(download){
-		// 	var index = 0;
-		// 	for(var i=0;i<this.downloadlist.length;i++){
-		// 		if(this.downloadlist[i].name == download.name){
-		// 			index = i;
-		// 			break;
-		// 		}
-		// 	}
-		// 	var range = "bytes=" + download.start + "-" + (download.start+10*1024*1024-1);
-		// 	abortDownload(download.Bucket, download.Key, range);
-		// 	this.downloadlist[index].isdownloadPaused = true;
-		// },
-		// //继续下载
-		// async continueDownload(download){
-		// 	var index = 0;
-		// 	for(var i=0;i<this.downloadlist.length;i++){
-		// 		if(this.downloadlist[i].name == download.name){
-		// 			index = i;
-		// 			break;
-		// 		}
-		// 	}
-		// 	this.downloadlist[index].isdownloadPaused = false;
-		// 	var sliceSize= 10*1024*1024;
-		// 	var slice = Math.ceil(this.downloadlist[index].Size/sliceSize);
-		// 	//获取缓存的index
-		// 	var index1 = 0;
-		// 	for(var i=0;i<this.downloadtemp.length;i++){
-		// 		if(this.downloadtemp[i].Name == download.name){
-		// 			index1 = i;
-		// 			console.log('index1',index1);
-		// 			break;
-		// 		}
-		// 	}
-		// 	var content = this.downloadtemp[index1].Content;
-		// 	console.log('继续 缓存1',download.name,content);
-		// 	var range = "";
-		// 	var begin = Math.ceil(slice*(this.downloadlist[index].percent2/100));
-		// 	console.log("begin",begin);
-		// 	for(var i=begin;i<=slice-1;i++){
-		// 		if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
-		// 			var start = i*sliceSize;
-		// 			var end = start + sliceSize -1;
-		// 			this.downloadlist[index].start = i*sliceSize
-		// 			range = "bytes=" + start + "-" + end;
-		// 			console.log(range);
-		// 			var part = await getObject(download.Bucket, download.Key, range);
-		// 			if(part == 0){
-		// 				this.$notify({
-		// 					title: "温馨提示",
-		// 					message: key+"\n下载失败",
-		// 					duration: 5000,
-		// 					offset: 50,
-		// 					type: "error"
-		// 				});
-		// 				this.cancelDownload(this.downloadlist[index]);
-		// 				break;
-		// 			}else{
-		// 				let buffer = Buffer.from(part);
-		// 				let buff = Buffer.from(content);
-		// 				content = Buffer.concat([buff,buffer]);
-		// 				//异步操作后重新获取下载内容的index
-		// 				var index2 = 0;
-		// 				for(var k=0;k<this.downloadlist.length;k++){
-		// 					if(this.downloadlist[k].name == download.name){
-		// 						index2 = k;
-		// 						break;
-		// 					}
-		// 				}
-		// 				this.downloadlist[index2].percent2 = (i+1)/slice*100;
-		// 				console.log(this.downloadlist[index2].percent2);
-		// 			}				
-		// 		}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
-		// 			for(var i=0;i<this.downloadtemp.length;i++){
-		// 				if(this.downloadtemp[i].Name == download.name){
-		// 					this.downloadtemp[i].Content = content;
-		// 					console.log('继续 缓存2',download.name,this.downloadtemp[i].Content);
-		// 					break;
-		// 				}
-		// 			}
-		// 			break;
-		// 		}else{
-		// 			break;
-		// 		}				
-		// 	}
-		// 	//异步操作后重新获取下载内容的index
-		// 	var index3 = 0;
-		// 	for(var h=0;h<this.downloadlist.length;h++){
-		// 		if(this.downloadlist[h].name == download.name){
-		// 			index3 = h;
-		// 			break;
-		// 		}
-		// 	}
-		// 	if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
-		// 		console.log("content", content);
-		// 		var blob = new Blob([content]);
-		// 		var key = download.Key;
-		// 		var saveData = (function(blob, key) {
-		// 			var a = document.createElement("a");
-		// 			document.body.appendChild(a);
-		// 			a.style = "display: none";
-		// 			return function (blob, key) {
-		// 				var url = window.URL.createObjectURL(blob);
-		// 				a.href = url;
-		// 				a.download = key;
-		// 				a.click();
-		// 				window.URL.revokeObjectURL(url);
-		// 			};
-		// 		}());
-		// 		saveData(blob, key);				
-		// 		this.$notify({
-		// 			title: "温馨提示",
-		// 			message: key+"\n下载成功",
-		// 			duration: 5000,
-		// 			offset: 50,
-		// 			type: "success"
-		// 		});			
-		// 	}
-		// },
-		// //取消下载
-		// cancelDownload(download){
-		// 	if(download.Size<10*1024*1024){
-		// 		abortDownload(download.Bucket, download.Key);
-		// 	}
-		// 	var index = 0;
-		// 	for(var i=0;i<this.downloadlist.length;i++){
-		// 		if(this.downloadlist[i].name == download.name){
-		// 			console.log(this.downloadlist[i].name);
-		// 			index = i;
-		// 			break;
-		// 		}
-		// 	};
-		// 	this.downloadlist[index].isActive = false;			
-		// 	this.downloadlist.splice(index,1);
-		// 	//清空缓存
-		// 	if(this.downloadlist.length==0){
-		// 		this.downloadnum=[];
-		// 		this.downloadtemp = [];
-		// 	}
-		// },
+		//分片下载大文件
+		async downloadBigobj(bucket, size, name){
+			var sliceSize= 10*1024*1024;
+			var slice = Math.ceil(size/sliceSize);
+			var content = new Uint8Array([]);
+			var range = "";
+			for(var i=0;i<=slice-1;i++){
+				var key = '';
+				var index = 0;
+				for(var j=0;j<this.downloadlist.length;j++){
+					if(this.downloadlist[j].name == name){
+						index = j;
+						key = this.downloadlist[j].Key
+						break;
+					}
+				}
+				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
+					var start = i*sliceSize;
+					var end = start + sliceSize -1;
+					this.downloadlist[index].start = i*sliceSize;
+					range = "bytes=" + start + "-" + end;
+					var part = await getObject(bucket, key, range);
+					if(part == 0){
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n下载失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						this.cancelDownload(this.downloadlist[index]);
+						break;
+					}else{
+						let buffer = Buffer.from(part);
+						let buff = Buffer.from(content);
+						content = Buffer.concat([buff,buffer]);
+						//异步操作后重新获取下载内容的index
+						var index2 = 0;
+						for(var k=0;k<this.downloadlist.length;k++){
+							if(this.downloadlist[k].name == name){
+								index2 = k;
+								key = this.downloadlist[k].Key
+								break;
+							}
+						}
+						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						console.log(this.downloadlist[index2].percent2);				
+					}					
+				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+					if(this.downloadtemp.length==0){
+						var temp ={
+							Name:name,
+							Content:content,
+						}
+						this.downloadtemp.push(temp);
+						console.log("缓存1",name,temp.Content);
+					}else{
+						for(var i=0;i<this.downloadtemp.length;i++){
+							if(this.downloadtemp[i].Name == name){
+								this.downloadtemp[i].Content = content;
+								console.log("缓存2",name,this.downloadtemp[i].Content);
+								break;
+							}else{
+									var temp ={
+									Name:name,
+									Content:content,
+								}
+								this.downloadtemp.push(temp);
+								console.log("缓存3",name,temp.Content);
+								break;
+							}
+						}	
+					}
+					console.log("stop");
+					break;					
+				}else{
+					break;
+				}				
+			}
+			//异步操作后重新获取下载内容的index
+				var index3 = 0;
+				for(var h=0;h<this.downloadlist.length;h++){
+					if(this.downloadlist[h].name == name){
+						index3 = h;
+						key = this.downloadlist[h].Key
+						break;
+					}
+				}
+			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
+				console.log("content", content);
+				var blob = new Blob([content]);
+				var saveData = (function(blob, key) {
+					var a = document.createElement("a");
+					document.body.appendChild(a);
+					a.style = "display: none";
+					return function (blob, key) {
+						var url = window.URL.createObjectURL(blob);
+						a.href = url;
+						a.download = key;
+						a.click();
+						window.URL.revokeObjectURL(url);
+					};
+				}());
+				saveData(blob, key);
+				this.$notify({
+					title: "温馨提示",
+					message: key+"\n下载成功",
+					duration: 5000,
+					offset: 50,
+					type: "success"
+				});
+			}
+		},
+		//暂停下载
+		pauseDownload(download){
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(this.downloadlist[i].name == download.name){
+					index = i;
+					break;
+				}
+			}
+			var range = "bytes=" + download.start + "-" + (download.start+10*1024*1024-1);
+			this.downloadlist[index].isdownloadPaused = true;
+		},
+		//继续下载
+		async continueDownload(download){
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(this.downloadlist[i].name == download.name){
+					index = i;
+					break;
+				}
+			}
+			this.downloadlist[index].isdownloadPaused = false;
+			var sliceSize= 10*1024*1024;
+			var slice = Math.ceil(this.downloadlist[index].Size/sliceSize);
+			//获取缓存的index
+			var index1 = 0;
+			for(var i=0;i<this.downloadtemp.length;i++){
+				if(this.downloadtemp[i].Name == download.name){
+					index1 = i;
+					console.log('index1',index1);
+					break;
+				}
+			}
+			var content = this.downloadtemp[index1].Content;
+			console.log('继续 缓存1',download.name,content);
+			var range = "";
+			var begin = Math.ceil(slice*(this.downloadlist[index].percent2/100));
+			console.log("begin",begin);
+			for(var i=begin;i<=slice-1;i++){
+				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
+					var start = i*sliceSize;
+					var end = start + sliceSize -1;
+					this.downloadlist[index].start = i*sliceSize
+					range = "bytes=" + start + "-" + end;
+					console.log(range);
+					var part = await getObject(download.Bucket, download.Key, range);
+					if(part == 0){
+						this.$notify({
+							title: "温馨提示",
+							message: key+"\n下载失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						this.cancelDownload(this.downloadlist[index]);
+						break;
+					}else{
+						let buffer = Buffer.from(part);
+						let buff = Buffer.from(content);
+						content = Buffer.concat([buff,buffer]);
+						//异步操作后重新获取下载内容的index
+						var index2 = 0;
+						for(var k=0;k<this.downloadlist.length;k++){
+							if(this.downloadlist[k].name == download.name){
+								index2 = k;
+								break;
+							}
+						}
+						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						console.log(this.downloadlist[index2].percent2);
+					}				
+				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+					for(var i=0;i<this.downloadtemp.length;i++){
+						if(this.downloadtemp[i].Name == download.name){
+							this.downloadtemp[i].Content = content;
+							console.log('继续 缓存2',download.name,this.downloadtemp[i].Content);
+							break;
+						}
+					}
+					break;
+				}else{
+					break;
+				}				
+			}
+			//异步操作后重新获取下载内容的index
+			var index3 = 0;
+			for(var h=0;h<this.downloadlist.length;h++){
+				if(this.downloadlist[h].name == download.name){
+					index3 = h;
+					break;
+				}
+			}
+			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
+				console.log("content", content);
+				var blob = new Blob([content]);
+				var key = download.Key;
+				var saveData = (function(blob, key) {
+					var a = document.createElement("a");
+					document.body.appendChild(a);
+					a.style = "display: none";
+					return function (blob, key) {
+						var url = window.URL.createObjectURL(blob);
+						a.href = url;
+						a.download = key;
+						a.click();
+						window.URL.revokeObjectURL(url);
+					};
+				}());
+				saveData(blob, key);				
+				this.$notify({
+					title: "温馨提示",
+					message: key+"\n下载成功",
+					duration: 5000,
+					offset: 50,
+					type: "success"
+				});			
+			}
+		},
+		//取消下载
+		cancelDownload(download){
+			var index = 0;
+			for(var i=0;i<this.downloadlist.length;i++){
+				if(this.downloadlist[i].name == download.name){
+					console.log(this.downloadlist[i].name);
+					index = i;
+					break;
+				}
+			};
+			this.downloadlist[index].isActive = false;			
+			this.downloadlist.splice(index,1);
+			//清空缓存
+			if(this.downloadlist.length==0){
+				this.downloadnum=[];
+				this.downloadtemp = [];
+			}
+		},
 
 		//文件详情
 		handleInfo(scope){
@@ -1687,8 +1701,9 @@ export default {
 			}				
 		}
 	},
-	mounted(){				
+	mounted(){
 		var name = this.$store.state.username;
+		console.log(name);
 		InitAWS(this.$store.state.interfaceIp);
 		this.getKey(name);		
 	}

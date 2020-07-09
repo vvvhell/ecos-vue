@@ -25,7 +25,7 @@ export function InitAWS(ip){
 }
 
 export function ConfigKey(AccessKeyId,SecretAccessKey){
-	AWS.config.update({
+	s3.config.update({
 		accessKeyId:AccessKeyId,
 		secretAccessKey:SecretAccessKey
 	})
@@ -52,7 +52,7 @@ export async function createKey(name){
 	try {
 		const data = await iam.createAccessKey(params).promise();
 		console.log(data);
-		return data;
+		return data.AccessKey;
 	} catch (e) {
 		console.log(e);
 		return 0;
@@ -92,9 +92,10 @@ export async function listObjects(bucket, signal, marker ) {
 	}
 }
 
-export async function createBucket(name){
+export async function createBucket(name, acl){
 	const param = {
-		Bucket: name + '/'
+		Bucket: name + '/',
+		ACL: acl
 	};
 	try {
 		await s3.createBucket(param).promise();
@@ -104,7 +105,6 @@ export async function createBucket(name){
 			callback(value);
 		};
 		success(value=>{
-			console.log("value",value);
 			response = 'OK'
 		})
 		console.log(response);
@@ -129,11 +129,12 @@ export async function deleteBucket(name){
 	}
 }
 
-export async function putObject(data, bucket, key){
+export async function putObject(data, bucket, key, acl){
 	const params = {
 		Body: data,
 		Bucket: bucket,
-		Key: key
+		Key: key,
+		ACL: acl
 	};
 	try {
 		const data = await s3.putObject(params).promise();
@@ -163,10 +164,11 @@ export async function getObject(bucket, key, range){
 	}
 }
 
-export async function getUploadID(bucket, key){
+export async function getUploadID(bucket, key, acl){
 	const params = {
 		Bucket: bucket,
 		Key: key,
+		ACL: acl
 	};
 	try {
 		const data = await s3.createMultipartUpload(params).promise();
@@ -195,7 +197,7 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID){
 			callback(value);
 		};
 		success(value=>{
-			console.log("value",value);
+			console.log("success");
 			response = 'OK'
 		})
 		return response;
