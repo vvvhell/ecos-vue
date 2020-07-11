@@ -111,7 +111,7 @@
 						<el-row style="margin-top:25px" v-show="detailvisible">
 							<el-card>
 								<el-button type="primary" icon="el-icon-refresh" :loading="loading(bucketName)" @click="refresh" >刷新</el-button>
-								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload">上传文件</el-button>
+								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload" :loading="loading(bucketName)">上传文件</el-button>
 								<el-button type="danger" icon="el-icon-delete" @click="handleDeleteBucket" :loading="loading(bucketName)">删除存储桶</el-button>
 								<el-table
 									v-loading="loadingtable"
@@ -332,7 +332,6 @@ export default {
 
 			uploadlist:[],
 			downloadlist:[],
-			uploadindex: -1,
 			downloadnum:[],
 			downloadtemp:[],
 
@@ -927,7 +926,7 @@ export default {
 						that.cancelUpload(that.uploadlist[index]);
 					}
 				}else{   //大于15MB的文件
-					var msg = await that.putBigobj(blob, name, key, size, tempobj.Key);
+					await that.putBigobj(blob, name, key, size, tempobj.Key);
 				}				
 			}		
 		},
@@ -938,6 +937,7 @@ export default {
 		async putBigobj(blob, name, key, size, Key){
 			var uploadID = await getUploadID(name, key, this.Acl);
 			if(uploadID == 0){
+				console.log('delete');
 				this.$notify({
 					title: "温馨提示",
 					message: key+"\n上传失败",
@@ -945,66 +945,66 @@ export default {
 					offset: 50,
 					type: "error"
 				});
-				var index = 0;
-					for(var i=0;i<this.uploadlist.length;i++){
-						if(this.uploadlist[i].Key == tempobj.Key){
-							index = i;
-							break;
-						}
+				var index1 = 0;
+				for(var i=0;i<this.uploadlist.length;i++){
+					if(this.uploadlist[i].Key == Key){
+						index1 = i;
+						break;
 					}
-					this.cancelUpload(this.uploadlist[index]);
+				}				
+				this.cancelUpload(this.uploadlist[index1]);
 				return;
 			}else{
 				var sliceSize= 10*1024*1024;
 				var slice = Math.ceil(size/sliceSize);
 				var parts = [];
-				for(var i=0; i<slice ;i++){
-					var index = 0;
+				for(var a=0; a<slice;a++){
+					var index2 = 0;
 					for(var j=0;j<this.uploadlist.length;j++){
 						if(this.uploadlist[j].Key == Key){
-							index = j;
+							index2 = j;
 							break;
 						}
 					}
-					if(this.uploadlist[index].isActive == true && this.uploadlist[index].isPaused == false){
-						this.uploadlist[index].UploadID = uploadID;
+					console.log(this.uploadlist[index2].Key,this.uploadlist[index2].isActive);
+					if(this.uploadlist[index2].isActive == true && this.uploadlist[index2].isPaused == false){
+						this.uploadlist[index2].UploadID = uploadID;
 						var partobj = {
 							ETag: "",
 							PartNumber: 1
 						}
-						var start = i*sliceSize;
+						var start = a*sliceSize;
 						var end = start + sliceSize;
-						if(i == slice-1){
+						if(a == slice-1){
 							end = size-1;
 						}
 						console.log("range:", start, end);
 						var chunk = blob.slice(start, end);
-						var partnumber = i+1;
-						if(this.uploadlist[index].isPaused == false){
-							var msg = await uploadPart(chunk, name, key, partnumber, uploadID);
-							if(this.uploadlist[index].isPaused == true){
-								msg = 'abort';
-								this.uploadlist[index].loading = false;
+						var partnumber = a+1;
+						var msg = await uploadPart(chunk, name, key, partnumber, uploadID);					
+						var index3 = 0;
+						for(var k=0;k<this.uploadlist.length;k++){
+							if(this.uploadlist[k].Key == Key){
+								index3 = k;
+								break;
 							}
+						}
+						if(this.uploadlist[index3].isPaused == true){
+							msg = 'abort';
+							this.uploadlist[index3].loading = false;
 						}						
-						if(msg != 0){
-							var index1 = 0;
-							for(var k=0;k<this.uploadlist.length;k++){
-								if(this.uploadlist[k].Key == Key){
-									index1 = k;
-									break;
-								}
-							}														
+						if(msg !== 0){
 							partobj.ETag = msg;
 							partobj.PartNumber = partnumber;
 							parts.push(partobj);
-							this.uploadlist[index1].parts.push(partobj);
+							this.uploadlist[index3].parts.push(partobj);
 							if(msg == 'abort' ){
 								console.log('point')								
 							}else{
-								this.uploadlist[index1].percent1 = (i+1)/slice*100;
+								this.uploadlist[index3].percent1 = (a+1)/slice*100;
+								//this.uploadlist[index3].loading = false;
 							}
-							console.log("percent", this.uploadlist[index1].percent1);
+							console.log("percent", this.uploadlist[index3].percent1);
 						}else if(msg == 0){
 							this.$notify({
 								title: "温馨提示",
@@ -1013,28 +1013,21 @@ export default {
 								offset: 50,
 								type: "error"
 							});
-							var index1 = 0;
-							for(var k=0;k<this.uploadlist.length;k++){
-								if(this.uploadlist[k].Key == Key){
-									index1 = k;
-									break;
-								}
-							};
-							this.cancelUpload(this.uploadlist[index1]);
-							return;
+							this.cancelUpload(this.uploadlist[index3]);
+							rerturn;
 						}
-					}else{
-						break;
-					}					
+					}else if(this.uploadlist[index2].isActive == false || this.uploadlist[index2].isPaused == true){
+						return;
+					}				
 				}
-				var index2 = 0;
-				for(var j=0;j<this.uploadlist.length;j++){
-					if(this.uploadlist[j].Key == Key){
-						index2 = j;
+				var index4 = 0;
+				for(var m=0;m<this.uploadlist.length;m++){
+					if(this.uploadlist[m].Key == Key){
+						index4 = m;
 						break;
 					}
 				}
-				if(this.uploadlist[index2].isActive == true && this.uploadlist[index2].isPaused == false){
+				if(this.uploadlist[index4].isActive == true && this.uploadlist[index4].isPaused == false){
 					console.log(parts);
 					if(parts.length == slice){
 						var completemsg = await completeUpload(name, key, uploadID, parts);
@@ -1055,12 +1048,10 @@ export default {
 							offset: 50,
 							type: "error"
 						});
-						this.cancelUpload(this.uploadlist[index2]);
+						this.cancelUpload(this.uploadlist[index4]);
 					}
-					
 				}				
-			}
-			
+			}			
 		},
 		//暂停上传
 		pauseUpload(upload){
@@ -1098,7 +1089,7 @@ export default {
 				//获取已上传信息
 				var uploaded = await uploadedParts(upload.Bucket, upload.key, upload.UploadID);
 				var len = uploaded.length;
-				console.log("len: ", len);
+				console.log('len',len);
 				//继续分片上传
 				for(var i=len; i<slice ;i++){
 					var index1 = 0;
@@ -1122,13 +1113,13 @@ export default {
 						var chunk = blob.slice(start, end);
 						console.log("chunksize: ",chunk.size);
 						var partnumber = i+1;
-						if(that.uploadlist[index1].isPaused == false){
+						//if(that.uploadlist[index1].isPaused == false){
 							var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
 							if(that.uploadlist[index1].isPaused == true){
 								msg = 'abort';
 								that.uploadlist[index1].loading = false;
 							}
-						}
+						//}
 							if(msg != 0){
 								var index2 = 0;
 								for(var j=0;j<that.uploadlist.length;j++){
@@ -1144,6 +1135,7 @@ export default {
 									console.log('point');
 								}else{
 									that.uploadlist[index2].percent1 = (i+1)/slice*100;
+									//that.uploadlist[index2].loading = false;
 								}
 								console.log("percent", that.uploadlist[index2]);
 							}else if(msg == 0){
@@ -1157,6 +1149,9 @@ export default {
 								that.cancelUpload(upload);
 								return;
 							}					
+					}else if(that.uploadlist[index1].isActive == true && that.uploadlist[index1].isPaused == true){
+						that.uploadlist[index1].loading = false;
+						break;
 					}
 				}
 				//完成上传
@@ -1225,14 +1220,18 @@ export default {
 					break;
 				}
 			};
-			this.uploadlist[index].isActive = false;			
-			if(this.uploadlist[index].Size >= 15*1024*1024){				
+			this.uploadlist[index].isActive = false;
+			console.log(this.uploadlist[i].Key,this.uploadlist[index].isActive);									
+			if(this.uploadlist[index].Size >= 15*1024*1024 && this.uploadlist[index].percent1 < 100){				
 				let bucket = upload.Bucket;
 				let key = upload.key;
 				let uploadId = upload.UploadID;
-				await abortUpload(bucket, key, uploadId);								
-			};
-			this.uploadlist.splice(index,1);
+				await abortUpload(bucket, key, uploadId);
+				console.log("abort");								
+			}else{
+				this.uploadlist.splice(index,1);
+			}
+			
 		},
 
 		//下载文件
