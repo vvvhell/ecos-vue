@@ -175,10 +175,10 @@
 						<el-card class="downloadlist" v-show="downloadlistvisible" v-bind:key="download.name" v-if="download.isActive">
 							<div>
 								<span><i class="el-icon-document"></i>&nbsp; {{download.name}}</span>
-								<el-button style="margin-left: 15px" type="primary" circle v-if="download.isdownloadPaused && download.percent2!=100" @click="continueDownload(download)">
+								<el-button style="margin-left: 15px" type="primary" circle v-if="download.isdownloadPaused && download.percent2!=100" :disabled="getPauseload(download)" @click="continueDownload(download)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting" ></use></svg>
 								</el-button>
-								<el-button style="margin-left: 15px" type="warning" circle v-if="!download.isdownloadPaused && download.percent!=100" @click="pauseDownload(download)">
+								<el-button style="margin-left: 15px" type="warning" circle v-if="!download.isdownloadPaused && download.percent!=100" :disabled="getPauseload(download)" @click="pauseDownload(download)">
 									<svg class="icon" aria-hidden="true"><use xlink:href="#el-icon-myzanting_huaban" ></use></svg>
 								</el-button>
 								<el-button style="float: right" type="danger" icon="el-icon-delete" circle @click="cancelDownload(download)"></el-button>
@@ -836,6 +836,7 @@ export default {
 			};
 			for(var i=0;i<this.uploadlist.length;i++){
 				if(tempobj.Bucket == this.uploadlist[i].Bucket && tempobj.key == this.uploadlist[i].key){
+					console.log(tempobj.Bucket,this.uploadlist[i].Bucket,tempobj.key,this.uploadlist[i].key);
 					this.$notify({
 						title: "温馨提示",
 						message: key+"\n已在上传列表中，请勿重复上传",
@@ -930,8 +931,8 @@ export default {
 				}				
 			}		
 		},
-		getPauseload(upload){
-			return upload.loading;
+		getPauseload(data){
+			return data.loading;
 		},
 		//分片上传大文件
 		async putBigobj(blob, name, key, size, Key){
@@ -1014,7 +1015,7 @@ export default {
 								type: "error"
 							});
 							this.cancelUpload(this.uploadlist[index3]);
-							rerturn;
+							return;
 						}
 					}else if(this.uploadlist[index2].isActive == false || this.uploadlist[index2].isPaused == true){
 						return;
@@ -1078,7 +1079,7 @@ export default {
 			};
 			this.uploadlist[index].isPaused = false;
 			//重新读取文件
-			var fileReader = new FileReader();
+			let fileReader = new FileReader();
 			fileReader.readAsArrayBuffer(upload.File);
 			var that = this;
 			fileReader.onload = async function(){
@@ -1146,12 +1147,16 @@ export default {
 									offset: 50,
 									type: "error"
 								});
+								fileReader = null;
 								that.cancelUpload(upload);
 								return;
 							}					
 					}else if(that.uploadlist[index1].isActive == true && that.uploadlist[index1].isPaused == true){
+						// console.log(fileReader);
+						// fileReader = null;
+						// console.log(fileReader);
 						that.uploadlist[index1].loading = false;
-						break;
+						return;
 					}
 				}
 				//完成上传
@@ -1222,7 +1227,8 @@ export default {
 			};
 			this.uploadlist[index].isActive = false;
 			console.log(this.uploadlist[i].Key,this.uploadlist[index].isActive);									
-			if(this.uploadlist[index].Size >= 15*1024*1024 && this.uploadlist[index].percent1 < 100){				
+			if(this.uploadlist[index].Size >= 15*1024*1024 && this.uploadlist[index].percent1 < 100){
+				this.uploadlist.splice(index,1);				
 				let bucket = upload.Bucket;
 				let key = upload.key;
 				let uploadId = upload.UploadID;
@@ -1312,7 +1318,8 @@ export default {
 			this.$set(renameobj,'isActive',true);
 			this.$set(renameobj,'percent2',0);
 			this.$set(renameobj,'isdownloadPaused',false);
-			this.$set(renameobj,'start',0)
+			this.$set(renameobj,'start',0);
+			this.$set(renameobj,'loading',false);
 			var num = this.downloadnum[index2].num -1;
 			console.log('num',num);
 			if(num>0){
@@ -1445,6 +1452,7 @@ export default {
 							}
 						}
 						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						this.downloadlist[index2].loading = false;
 						console.log(this.downloadlist[index2].percent2);				
 					}					
 				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
@@ -1523,6 +1531,7 @@ export default {
 			}
 			var range = "bytes=" + download.start + "-" + (download.start+10*1024*1024-1);
 			this.downloadlist[index].isdownloadPaused = true;
+			this.downloadlist[index].loading = true;
 		},
 		//继续下载
 		async continueDownload(download){
@@ -1581,6 +1590,7 @@ export default {
 							}
 						}
 						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						this.downloadlist[index2].loading = false;
 						console.log(this.downloadlist[index2].percent2);
 					}				
 				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
