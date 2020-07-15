@@ -1044,7 +1044,8 @@ export default {
 								offset: 50,
 								type: "success"
 							});
-						}				
+						}
+						blob = [];				
 					}else{
 						this.$notify({
 							title: "温馨提示",
@@ -1193,7 +1194,9 @@ export default {
 					this.cancelUpload(upload);
 					return;
 				}
-			}					
+			}
+			data = [];
+			blob =[];					
 		},
 		submitUpload(){
 			console.log("上传：", this.fileName);
@@ -1220,6 +1223,7 @@ export default {
 			if(this.uploadlist[index].Size >= 15*1024*1024 && this.uploadlist[index].percent1 < 100){				
 				for(var j=0;j<this.uploadcache.length;j++){
 					if(this.uploadcache[j].name == this.uploadlist[index].key){
+						this.uploadcache[j].data = [];
 						this.uploadcache[j] = {};
 						break;
 					}
@@ -1233,7 +1237,9 @@ export default {
 			}else{
 				this.uploadlist.splice(index,1);
 			}
-			
+			if(this.uploadlist.length == 0){
+				this.uploadcache =[];
+			}	
 		},
 
 		//下载文件
@@ -1491,7 +1497,7 @@ export default {
 						break;
 					}
 				}
-			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].percent2 == 100){
+			if(this.downloadlist[index3].percent2 == 100){
 				console.log("content", content, content.length);
 				var blob = new Blob([content]);
 				var saveData = (function(blob, key) {
@@ -1507,6 +1513,8 @@ export default {
 					};
 				}());
 				saveData(blob, key);
+				content = [];
+				blob = [];
 				this.$notify({
 					title: "温馨提示",
 					message: key+"\n下载成功",
@@ -1555,9 +1563,9 @@ export default {
 			var range = "";
 			var begin = content.length/sliceSize + 1;
 			console.log("begin",begin);
-			for(var i=begin;i<slice;i++){
+			for(var i=begin;i<=slice;i++){
 				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
-					var start = i*sliceSize;
+					var start = (i-1)*sliceSize;
 					var end = start + sliceSize -1;
 					this.downloadlist[index].start = i*sliceSize
 					range = "bytes=" + start + "-" + end;
@@ -1585,7 +1593,7 @@ export default {
 								break;
 							}
 						}
-						this.downloadlist[index2].percent2 = (i+1)/slice*100;
+						this.downloadlist[index2].percent2 = i/slice*100;
 						this.downloadlist[index2].loading = false;
 						console.log(this.downloadlist[index2].percent2);
 					}				
@@ -1610,7 +1618,7 @@ export default {
 					break;
 				}
 			}
-			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].percent2 == 100){
+			if(content.length == this.downloadlist[index3].Size){
 				console.log("content", content.length, this.downloadlist[index3].Size);
 				var blob = new Blob([content]);
 				var key = download.Key;
@@ -1626,7 +1634,9 @@ export default {
 						window.URL.revokeObjectURL(url);
 					};
 				}());
-				saveData(blob, key);				
+				saveData(blob, key);
+				content = [];
+				blob = [];				
 				this.$notify({
 					title: "温馨提示",
 					message: key+"\n下载成功",
@@ -1646,7 +1656,12 @@ export default {
 					break;
 				}
 			};
-			this.downloadlist[index].isActive = false;			
+			this.downloadlist[index].isActive = false;
+			for(var j=0;j<this.downloadtemp.length;j++){
+				if(this.downloadtemp[j].Name == download.name){
+					this.downloadtemp[j].Content = [];
+				}
+			};			
 			this.downloadlist.splice(index,1);
 			//清空缓存
 			if(this.downloadlist.length==0){
