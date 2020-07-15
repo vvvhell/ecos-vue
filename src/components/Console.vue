@@ -331,6 +331,7 @@ export default {
 			scope:[],
 
 			uploadlist:[],
+			uploadcache:[],
 			downloadlist:[],
 			downloadnum:[],
 			downloadtemp:[],
@@ -887,6 +888,11 @@ export default {
 			var that = this;
 			//文件载入成功
 			fileReader.onload = async function(){
+				var filecache = {
+					name:that.fileName,
+					data:this.result
+				};
+				that.uploadcache.push(filecache);
 				//读取完成后，数据保存在对象的result属性中
 				console.log(this.result);
 				var blob = new Blob([this.result]);
@@ -927,8 +933,14 @@ export default {
 						that.cancelUpload(that.uploadlist[index]);
 					}
 				}else{   //大于15MB的文件
+					for(var i=0;i<that.uploadlist.length;i++){
+							if(that.uploadlist[i].Key == tempobj.Key){
+								that.uploadlist[i].loading = false;
+								break;
+							}
+					}
 					await that.putBigobj(blob, name, key, size, tempobj.Key);
-				}				
+				}
 			}		
 		},
 		getPauseload(data){
@@ -967,7 +979,7 @@ export default {
 							break;
 						}
 					}
-					console.log(this.uploadlist[index2].Key,this.uploadlist[index2].isActive);
+					console.log(this.uploadlist[index2].Key);
 					if(this.uploadlist[index2].isActive == true && this.uploadlist[index2].isPaused == false){
 						this.uploadlist[index2].UploadID = uploadID;
 						var partobj = {
@@ -982,29 +994,21 @@ export default {
 						console.log("range:", start, end);
 						var chunk = blob.slice(start, end);
 						var partnumber = a+1;
-						var msg = await uploadPart(chunk, name, key, partnumber, uploadID);					
+						var msg = await uploadPart(chunk, name, key, partnumber, uploadID);										
 						var index3 = 0;
 						for(var k=0;k<this.uploadlist.length;k++){
 							if(this.uploadlist[k].Key == Key){
 								index3 = k;
 								break;
 							}
-						}
-						if(this.uploadlist[index3].isPaused == true){
-							msg = 'abort';
-							this.uploadlist[index3].loading = false;
-						}						
+						}					
 						if(msg !== 0){
 							partobj.ETag = msg;
 							partobj.PartNumber = partnumber;
 							parts.push(partobj);
 							this.uploadlist[index3].parts.push(partobj);
-							if(msg == 'abort' ){
-								console.log('point')								
-							}else{
-								this.uploadlist[index3].percent1 = (a+1)/slice*100;
-								//this.uploadlist[index3].loading = false;
-							}
+							this.uploadlist[index3].percent1 = (a+1)/slice*100;
+							this.uploadlist[index3].loading = false;
 							console.log("percent", this.uploadlist[index3].percent1);
 						}else if(msg == 0){
 							this.$notify({
@@ -1028,7 +1032,7 @@ export default {
 						break;
 					}
 				}
-				if(this.uploadlist[index4].isActive == true && this.uploadlist[index4].isPaused == false){
+				if(this.uploadlist[index4].isActive == true && this.uploadlist[index4].percent1 == 100){
 					console.log(parts);
 					if(parts.length == slice){
 						var completemsg = await completeUpload(name, key, uploadID, parts);
@@ -1068,142 +1072,128 @@ export default {
 			this.uploadlist[index].loading = true;
 		},
 		//继续上传
-		continueUpload(upload){
-			var index = 0;
+		async continueUpload(upload){
 			for(var i=0;i<this.uploadlist.length;i++){
-				if(this.uploadlist[i].Key == upload.Key){
+				if(this.uploadlist[i].Key == upload.Key){					
 					console.log(this.uploadlist[i].Key);
-					index = i;
+					this.uploadlist[i].isPaused = false;
 					break;
 				}
 			};
-			this.uploadlist[index].isPaused = false;
 			//重新读取文件
-			let fileReader = new FileReader();
-			fileReader.readAsArrayBuffer(upload.File);
-			var that = this;
-			fileReader.onload = async function(){
-				console.log(this.result);
-				var blob = new Blob([this.result]);
-				var sliceSize= 10*1024*1024;
-				var slice = Math.ceil(upload.File.size/sliceSize);
-				//获取已上传信息
-				var uploaded = await uploadedParts(upload.Bucket, upload.key, upload.UploadID);
-				var len = uploaded.length;
-				console.log('len',len);
-				//继续分片上传
-				for(var i=len; i<slice ;i++){
-					var index1 = 0;
-					for(var j=0;j<that.uploadlist.length;j++){
-						if(that.uploadlist[j].Key == upload.Key){
-							index1 = j;
-							break;
-						}
-					}
-					if(that.uploadlist[index1].isActive == true && that.uploadlist[index1].isPaused == false){
-						var partobj = {
-							ETag: "",
-							PartNumber: 1
-						}
-						var start = i*sliceSize;
-						var end = start + sliceSize;
-						if(i == slice-1){
-							end = upload.File.size-1;
-						}
-						console.log("range", start, end);
-						var chunk = blob.slice(start, end);
-						console.log("chunksize: ",chunk.size);
-						var partnumber = i+1;
-						//if(that.uploadlist[index1].isPaused == false){
-							var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
-							if(that.uploadlist[index1].isPaused == true){
-								msg = 'abort';
-								that.uploadlist[index1].loading = false;
-							}
-						//}
-							if(msg != 0){
-								var index2 = 0;
-								for(var j=0;j<that.uploadlist.length;j++){
-									if(that.uploadlist[j].Key == upload.Key){
-										index2 = j;
-										break;
-									}
-								}								
-								partobj.ETag = msg;
-								partobj.PartNumber = partnumber;
-								that.uploadlist[index2].parts.push(partobj);
-								if(msg == 'abort'){
-									console.log('point');
-								}else{
-									that.uploadlist[index2].percent1 = (i+1)/slice*100;
-									//that.uploadlist[index2].loading = false;
-								}
-								console.log("percent", that.uploadlist[index2]);
-							}else if(msg == 0){
-								that.$notify({
-									title: "温馨提示",
-									message: upload.key+"\n上传失败",
-									duration: 5000,
-									offset: 50,
-									type: "error"
-								});
-								fileReader = null;
-								that.cancelUpload(upload);
-								return;
-							}					
-					}else if(that.uploadlist[index1].isActive == true && that.uploadlist[index1].isPaused == true){
-						// console.log(fileReader);
-						// fileReader = null;
-						// console.log(fileReader);
-						that.uploadlist[index1].loading = false;
-						return;
-					}
+			var data = [];
+			for(var a=0;a<this.uploadcache.length;a++){
+				if(this.uploadcache[a].name == upload.key){
+					data = this.uploadcache[a].data;
+					console.log(data);
+					break;
 				}
-				//完成上传
-				var index3 = 0;
-				for(var j=0;j<that.uploadlist.length;j++){
-					if(that.uploadlist[j].Key == upload.Key){
-						index3 = j;
+			}
+			var blob = new Blob([data]);
+			var sliceSize= 10*1024*1024;
+			var slice = Math.ceil(upload.File.size/sliceSize);
+			//获取已上传信息
+			console.log(blob);
+			var uploaded = await uploadedParts(upload.Bucket, upload.key, upload.UploadID);
+			var len = uploaded.length;
+			console.log('len',len);
+			//继续分片上传
+			for(var i=len; i<slice ;i++){
+				var index1 = 0;
+				for(var j=0;j<this.uploadlist.length;j++){
+					if(this.uploadlist[j].Key == upload.Key){
+						index1 = j;
 						break;
 					}
 				}
-				if(that.uploadlist[index3].isActive == true && that.uploadlist[index3].isPaused == false){
-					console.log(upload.parts);
-					if(upload.parts.length == slice){
-						var completemsg = await completeUpload(upload.Bucket, upload.key, upload.UploadID, upload.parts);
-						if(completemsg != 0){
-							that.$notify({
-								title: "温馨提示",
-								message: upload.key+"\n上传成功",
-								duration: 5000,
-								offset: 50,
-								type: "success"
-							});
-						}else{
-							that.$notify({
-								title: "温馨提示",
-								message: upload.key+"\n上传失败",
-								duration: 5000,
-								offset: 50,
-								type: "error"
-							});
-							that.cancelUpload(upload);
-							return;
-						}				
-					}else{
-						that.$notify({
+				if(this.uploadlist[index1].isActive == true && this.uploadlist[index1].isPaused == false){
+					var partobj = {
+						ETag: "",
+						PartNumber: 1
+					}
+					var start = i*sliceSize;
+					var end = start + sliceSize;
+					if(i == slice-1){
+						end = upload.File.size-1;
+					}
+					console.log("range", start, end);
+					var chunk = blob.slice(start, end);
+					console.log("chunksize: ",chunk.size);
+					var partnumber = i+1;
+					var msg = await uploadPart(chunk, upload.Bucket, upload.key, partnumber, upload.UploadID);
+					if(msg != 0){
+						var index2 = 0;
+						for(var j=0;j<this.uploadlist.length;j++){
+							if(this.uploadlist[j].Key == upload.Key){
+								index2 = j;
+								break;
+							}
+						}								
+						partobj.ETag = msg;
+						partobj.PartNumber = partnumber;
+						this.uploadlist[index2].parts.push(partobj);
+					  this.uploadlist[index2].percent1 = (i+1)/slice*100;
+						this.uploadlist[index2].loading = false;
+						console.log("percent", this.uploadlist[index2]);
+					}else if(msg == 0){
+						this.$notify({
 							title: "温馨提示",
 							message: upload.key+"\n上传失败",
 							duration: 5000,
 							offset: 50,
 							type: "error"
 						});
-						that.cancelUpload(upload);
+						this.cancelUpload(upload);
 						return;
-					}
-
-				}				
-			}		
+					}					
+				}else if(this.uploadlist[index1].isActive == true && this.uploadlist[index1].isPaused == true){
+					this.uploadlist[index1].loading = false;
+					return;
+				}
+			}
+			//完成上传
+			var index3 = 0;
+			for(var j=0;j<this.uploadlist.length;j++){
+				if(this.uploadlist[j].Key == upload.Key){
+					index3 = j;
+					break;
+				}
+			}
+			if(this.uploadlist[index3].isActive == true && this.uploadlist[index3].percent1 == 100){
+				console.log(upload.parts);
+				if(upload.parts.length == slice){
+					var completemsg = await completeUpload(upload.Bucket, upload.key, upload.UploadID, upload.parts);
+					if(completemsg != 0){
+						this.$notify({
+							title: "温馨提示",
+							message: upload.key+"\n上传成功",
+							duration: 5000,
+							offset: 50,
+							type: "success"
+						});
+					}else{
+						this.$notify({
+							title: "温馨提示",
+							message: upload.key+"\n上传失败",
+							duration: 5000,
+							offset: 50,
+							type: "error"
+						});
+						this.cancelUpload(upload);
+						return;
+					}				
+				}else{
+					this.$notify({
+						title: "温馨提示",
+						message: upload.key+"\n上传失败",
+						duration: 5000,
+						offset: 50,
+						type: "error"
+					});
+					this.cancelUpload(upload);
+					return;
+				}
+			}					
 		},
 		submitUpload(){
 			console.log("上传：", this.fileName);
@@ -1227,7 +1217,13 @@ export default {
 			};
 			this.uploadlist[index].isActive = false;
 			console.log(this.uploadlist[i].Key,this.uploadlist[index].isActive);									
-			if(this.uploadlist[index].Size >= 15*1024*1024 && this.uploadlist[index].percent1 < 100){
+			if(this.uploadlist[index].Size >= 15*1024*1024 && this.uploadlist[index].percent1 < 100){				
+				for(var j=0;j<this.uploadcache.length;j++){
+					if(this.uploadcache[j].name == this.uploadlist[index].key){
+						this.uploadcache[j] = {};
+						break;
+					}
+				};
 				this.uploadlist.splice(index,1);				
 				let bucket = upload.Bucket;
 				let key = upload.key;
@@ -1495,8 +1491,8 @@ export default {
 						break;
 					}
 				}
-			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
-				console.log("content", content);
+			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].percent2 == 100){
+				console.log("content", content, content.length);
 				var blob = new Blob([content]);
 				var saveData = (function(blob, key) {
 					var a = document.createElement("a");
@@ -1557,9 +1553,9 @@ export default {
 			var content = this.downloadtemp[index1].Content;
 			console.log('继续 缓存1',download.name,content);
 			var range = "";
-			var begin = Math.ceil(slice*(this.downloadlist[index].percent2/100));
+			var begin = content.length/sliceSize + 1;
 			console.log("begin",begin);
-			for(var i=begin;i<=slice-1;i++){
+			for(var i=begin;i<slice;i++){
 				if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == false){
 					var start = i*sliceSize;
 					var end = start + sliceSize -1;
@@ -1614,8 +1610,8 @@ export default {
 					break;
 				}
 			}
-			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].isdownloadPaused == false){
-				console.log("content", content);
+			if(this.downloadlist[index3].isActive == true && this.downloadlist[index3].percent2 == 100){
+				console.log("content", content.length, this.downloadlist[index3].Size);
 				var blob = new Blob([content]);
 				var key = download.Key;
 				var saveData = (function(blob, key) {
