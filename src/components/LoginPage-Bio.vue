@@ -25,7 +25,7 @@
             <el-form-item>
               <br />
               <div style="text-align: center">
-                <el-button type="primary" @click="handleLogin1">登 录</el-button>
+                <el-button type="primary" @click="handleLogin">登 录</el-button>
                 <el-button @click="registerFormVisible = true">注 册</el-button>
               </div>
             </el-form-item>
@@ -71,8 +71,8 @@
       </div>
       <div slot="footer" class="dialog-footer" style="text-align: center">
         <el-button @click="registerFormVisible = false">返 回</el-button>
-        <!-- <el-button type="primary" @click="handleRegUserInfo">提交并进行身份信息采集</el-button> -->
-        <el-button type="primary" @click="handleCompleteReg">提交并进行身份信息采集</el-button>
+        <el-button type="primary" @click="handleRegUserInfo">提交并进行身份信息采集</el-button>
+        <!-- <el-button type="primary" @click="handleCompleteReg">提交并进行身份信息采集</el-button> -->
       </div>
     </el-dialog>
 
