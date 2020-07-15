@@ -420,6 +420,7 @@ export default {
 		//计算概览数据
 		async overviewData(){
 			this.showOverviewdata = true;
+			this.totalVol = 0;
 			var allObjects = [];			
 			var that = this;
 			async function loadpiece(bucket, marker){
@@ -428,14 +429,9 @@ export default {
 				var data = await listObjects(bucket, false, marker);
 				allObjects = allObjects.concat(data.Contents);
 				if(data.NextMarker != ""){
-					loadpiece(bucket, data.NextMarker)
+					await loadpiece(bucket, data.NextMarker)
 				}else{
 					that.iscalculating = false;
-					that.fileNum = allObjects.length;
-					var Vol = 0;
-					for(var k=0;k<that.fileNum;k++){
-						Vol += allObjects[k].Size;
-					}
 				}
 			};
 			for(var i=0;i<this.bucketNum;i++){
@@ -443,17 +439,18 @@ export default {
 				var value = await listObjects(this.buckets[i].Name, false, '');
 				allObjects = allObjects.concat(value.Contents);
 				if(value.IsTruncated == true){						
-					loadpiece(this.buckets[i].Name, value.NextMarker);
+					await loadpiece(this.buckets[i].Name, value.NextMarker);
 				}else{
 					this.iscalculating = false;
-					this.fileNum = allObjects.length;
-					var Vol = 0;
-					for(var j=0;j<this.fileNum;j++){
-						Vol += allObjects[j].Size;
-					}
-					this.totalVol = Vol;					
 				}
 			};
+			console.log(allObjects);
+			this.fileNum = allObjects.length;
+			var Vol = 0;
+			for(var j=0;j<this.fileNum;j++){
+				Vol += allObjects[j].Size;
+			}
+			this.totalVol += Vol;
 			if(this.totalVol<1024){
 				this.showVol = this.totalVol.toFixed(2);
 				this.unit1 = "B";
@@ -469,7 +466,7 @@ export default {
 			if(this.totalVol>=1024*1024*1024){
 				this.showVol = (this.totalVol/1024/1024/1024).toFixed(2);
 				this.unit1 = "GB";
-			}
+			}					
 		},
 		
 		//获取Object列表
