@@ -886,7 +886,7 @@ export default {
 			//文件载入成功
 			fileReader.onload = async function(){
 				var filecache = {
-					name:that.fileName,
+					name:key,
 					data:this.result
 				};
 				that.uploadcache.push(filecache);
