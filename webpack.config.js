@@ -55,11 +55,10 @@ module.exports = (options = {}) => ({
     },
     extensions: ['.js', '.vue', '.json', '.css']
   },
+  //本地测试时的端口
   devServer: {
     host: '127.0.0.1',
     port: 8010,
-    // host: '219.223.195.158',
-    // port: 8010,
     proxy: {
       '/api': {
         target: '',

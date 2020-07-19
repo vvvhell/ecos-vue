@@ -1,7 +1,8 @@
 
 <template>
   <div id="console" style="width:100%">
-    <el-container style="height:100vh">      
+    <el-container style="height:100vh">
+			<!-- 标题栏       -->
 			<el-header style="height:130px">
 				<span>ECOS | 管理控制台</span>
 				<span style="float:right">
@@ -17,8 +18,9 @@
 					</el-dropdown>
 				</span>
 			</el-header>
-
+			<!-- 主体 -->
 			<el-container>
+				<!-- 左侧边栏 -->
         <el-aside width="350px">
 					<el-menu
 						default-active="2-0"
@@ -67,7 +69,7 @@
 
         <el-container>
           <el-main>
-
+						<!-- 概览界面卡片 -->
 						<el-row v-show="overviewvisible"> 
 							<el-card>
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
@@ -93,7 +95,7 @@
 								<el-button type="primary" @click="createdrawer = true">创建Bucket</el-button>
 							</el-card>
 						</el-row>
-
+						<!-- bucket内界面卡片 -->
 						<el-row v-show="detailvisible"> 
 							<el-card>
 								<div class="overview"><span><i class="el-icon-monitor"></i>&nbsp; 概览数据</span></div>
@@ -113,6 +115,7 @@
 								<el-button type="primary" icon="el-icon-refresh" :loading="loading(bucketName)" @click="refresh" >刷新</el-button>
 								<el-button type="primary" icon="el-icon-plus" @click="uploadfile" id="upload" :loading="loading(bucketName)">上传文件</el-button>
 								<el-button type="danger" icon="el-icon-delete" @click="handleDeleteBucket" :loading="loading(bucketName)">删除存储桶</el-button>
+								<!-- 对象列表 -->
 								<el-table
 									v-loading="loadingtable"
 									:data="objects"
@@ -152,7 +155,7 @@
 								</el-table>
 							</el-card>
 						</el-row>
-					
+						<!-- 上传列表 -->
 					  <template v-for="(upload) in uploadlist" >
 						<el-card class="uploadlist" v-show="uploadlistvisible" v-bind:key="upload.Key" v-if="upload.isActive">
 							<div>
@@ -170,7 +173,7 @@
 							</div>
 					  </el-card>
 					  </template>
-
+						<!-- 下载列表 -->
 						<template v-for="(download) in downloadlist">
 						<el-card class="downloadlist" v-show="downloadlistvisible" v-bind:key="download.name" v-if="download.isActive">
 							<div>
@@ -192,7 +195,7 @@
 					</el-main>
           
 					<el-footer>北京大学•深圳研究生院</el-footer>
-
+					<!-- 删除文件对话框 -->
 					<el-dialog
 						title="提示"
 						:visible.sync="deletevisible"
@@ -203,7 +206,7 @@
 							<el-button type="primary" @click="handleDeleteObj(scope)">确 定</el-button>
 						</span>
 					</el-dialog>
-
+					<!-- 删除存储桶对话框 -->
 					<el-dialog
 						title="提示"
 						:visible.sync="deleteallvisible"
@@ -214,12 +217,12 @@
 							<el-button type="primary" @click="deleteAll()">确 定</el-button>
 						</span>
 					</el-dialog>
-
+					<!-- 关于 抽屉 -->
 					<el-drawer	class="about" :with-header="false" :visible.sync="drawer" >
 						<div class="drawer-title">关于</div>
 						<div style="margin-bottom:5px">拟态对象存储系统 | ECOS</div><div style="margin-bottom:5px">版本号：V2.0</div><div>版权所有：北京大学深圳研究生院•未来网络实验室</div>
 					</el-drawer>
-
+					<!-- 创建bucket抽屉 -->
 					<el-drawer class="createbucket" :with-header="false" :visible.sync="createdrawer" :show-close="true">
 						<div class="drawer-title">创建Bucket</div>
 						<div style="width:90%">
@@ -238,14 +241,14 @@
 							<el-button @click="handleCancel">取 消</el-button><el-button type="primary" @click="handleCreate">创 建</el-button>
 						</div>
 					</el-drawer>
-
+					<!-- 文件详情抽屉 -->
 					<el-drawer	class="detaildrawer" :with-header="false" :visible.sync="detaildrawer">
 						<div class="drawer-title">文件详情</div>
 						<div style="margin-bottom:20px"><span style="display: inline-block; width: 100px">文件名:</span>{{objectName}}</div>
 						<div style="margin-bottom:20px"><span style="display: inline-block; width: 100px">ETag:</span>{{ETag}}</div>
 						<div><span style="display: inline-block; width: 100px">修改时间:</span>{{LastModified}}</div>
 					</el-drawer>
-
+					<!-- 上传文件对话框 -->
 					<el-dialog :visible.sync="uploadvisible" style="width: 40vx, text-align:center">
 						<el-upload
 							class="uploadfile"
@@ -369,10 +372,12 @@ export default {
   methods: {    
 		//右上角设置选项
 		handleCommand(command) {
+			//关于
 			if(command ==="about"){
 				this.$data.drawer = true;					
 				console.log("about")
 			}
+			//退出登录
 			else{
 				console.log("logout")
 				this.$store.dispatch('logoutAct');
@@ -451,6 +456,7 @@ export default {
 				Vol += allObjects[j].Size;
 			}
 			this.totalVol += Vol;
+			//根据文件大小选取单位
 			if(this.totalVol<1024){
 				this.showVol = this.totalVol.toFixed(2);
 				this.unit1 = "B";
@@ -476,9 +482,11 @@ export default {
 			this.$data.bucketName = param;
 			this.objects = this.loadObjects(param);							
 		},
+		//刷新列表
 		refresh(){
 			this.objects = this.loadObjects(this.bucketName);
 		},
+		//获取数据是否在loading
 		loading(bucketName){
 			for(var i=0;i<this.buckets.length;i++){
 				if(this.buckets[i].Name == bucketName){
@@ -493,6 +501,7 @@ export default {
 				}
 			}
 		},
+		//获取所有对象的列表,包括所有分页
 		loadObjects(param){
 			this.iscalculating = false;			
 			for(var i=0;i<this.buckets.length;i++){	
@@ -605,6 +614,7 @@ export default {
 			this.$data.newBucketName = "";
 			this.$data.createdrawer = false;
 		},
+		//创建bucket前的判断
 		handleCreate() {
 			if(this.$data.newBucketName !== ""){
 				var existed = 0;
@@ -647,6 +657,7 @@ export default {
 						});
 			}
 		},
+		//创建bucket
 		buildBucket(name, acl){
 			function fn4(callback){
 				createBucket(name, acl).then(function(value){
@@ -822,8 +833,8 @@ export default {
 			var tempobj = {
 				File: this.file,
 				Bucket: this.bucketName,
-				key: key,
-				Key: key,
+				key: key,		//文件名
+				Key: key,		//在上传列表中显示的名字
 				Size: size,
 				percent1: 0,
 				UploadID: "",
@@ -832,6 +843,7 @@ export default {
 				isActive: true,
 				loading: false
 			};
+			//检查该文件是否已在上传列表中
 			for(var i=0;i<this.uploadlist.length;i++){
 				if(tempobj.Bucket == this.uploadlist[i].Bucket && tempobj.key == this.uploadlist[i].key){
 					console.log(tempobj.Bucket,this.uploadlist[i].Bucket,tempobj.key,this.uploadlist[i].key);
@@ -847,6 +859,7 @@ export default {
 					continue;
 				}
 			}
+			//检查该文件是否正在下载
 			for(var i=0;i<this.downloadlist.length;i++){
 				if(tempobj.Bucket == this.downloadlist[i].Bucket && tempobj.key == this.downloadlist[i].Key){
 					this.$notify({
@@ -861,6 +874,7 @@ export default {
 					continue;
 				}
 			}
+			//若有同名文件在上传列表中,则修改列表中的文件名,同名文件后缀数字+1
 			if(this.uploadlist.length>0){
 				var num = 0;
 				for(var i=0;i<this.uploadlist.length;i++){
@@ -886,10 +900,12 @@ export default {
 			//文件载入成功
 			fileReader.onload = async function(){
 				var filecache = {
-					name:that.fileName,
+					name:key,
 					data:this.result
 				};
+				//将读取到的文件存入变量中,用于暂停恢复时读取
 				that.uploadcache.push(filecache);
+				console.log(that.uploadcache);
 				//读取完成后，数据保存在对象的result属性中
 				console.log(this.result);
 				var blob = new Blob([this.result]);
@@ -936,9 +952,9 @@ export default {
 								break;
 							}
 					}
-					await that.putBigobj(blob, name, key, size, tempobj.Key);
-				}
-			}		
+				await that.putBigobj(blob, name, key, size, tempobj.Key);
+				}		
+			}
 		},
 		getPauseload(data){
 			return data.loading;
@@ -946,6 +962,7 @@ export default {
 		//分片上传大文件
 		async putBigobj(blob, name, key, size, Key){
 			var uploadID = await getUploadID(name, key, this.Acl);
+			//获取uploadID失败时的处理
 			if(uploadID == 0){
 				console.log('delete');
 				this.$notify({
@@ -964,10 +981,11 @@ export default {
 				}				
 				this.cancelUpload(this.uploadlist[index1]);
 				return;
-			}else{
+			}else{		//获取到uploadID
 				var sliceSize= 10*1024*1024;
 				var slice = Math.ceil(size/sliceSize);
 				var parts = [];
+				// 循环上传分片
 				for(var a=0; a<slice;a++){
 					var index2 = 0;
 					for(var j=0;j<this.uploadlist.length;j++){
@@ -1029,6 +1047,7 @@ export default {
 						break;
 					}
 				}
+				//分片上传完成后调用complete接口
 				if(this.uploadlist[index4].isActive == true && this.uploadlist[index4].percent1 == 100){
 					console.log(parts);
 					if(parts.length == slice){
@@ -1042,7 +1061,7 @@ export default {
 								type: "success"
 							});
 						}
-						blob = [];				
+						//blob = [];				
 					}else{
 						this.$notify({
 							title: "温馨提示",
@@ -1087,6 +1106,7 @@ export default {
 					break;
 				}
 			}
+			console.log(data);
 			var blob = new Blob([data]);
 			var sliceSize= 10*1024*1024;
 			var slice = Math.ceil(upload.File.size/sliceSize);
@@ -1195,6 +1215,7 @@ export default {
 			data = [];
 			blob =[];					
 		},
+		// 点击完成按钮
 		submitUpload(){
 			console.log("上传：", this.fileName);
 			if(this.fileName == undefined){
@@ -1331,6 +1352,7 @@ export default {
 			//开始下载
 			var baseSize= 10*1024*1024;
 			if(size>baseSize){
+				//大文件分片下载
 				this.downloadBigobj(bucket, size, renameobj.name);
 			}else{
 				this.downloadObj(bucket, renameobj.name);
@@ -1372,6 +1394,7 @@ export default {
 				}else{
 					var blob = new Blob([content], {type:"stream"})
 					console.log("blob", blob);
+					//将获取到的blob对象保存为文件
 					var saveData = (function(blob, key) {
 						var a = document.createElement("a");
 						document.body.appendChild(a);
@@ -1455,6 +1478,7 @@ export default {
 						console.log(this.downloadlist[index2].percent2);				
 					}					
 				}else if(this.downloadlist[index].isActive == true && this.downloadlist[index].isdownloadPaused == true){
+					//暂停后将已下载的内容存入缓存数组
 					if(this.downloadtemp.length==0){
 						var temp ={
 							Name:name,

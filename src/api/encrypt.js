@@ -3,8 +3,9 @@ import axios from 'axios'
 import { JSEncrypt } from 'jsencrypt/bin/jsencrypt';
 Vue.prototype.$axios = axios
 const CryptoJS = require('crypto-js');
+//用于和CM服务器通信中的加解密
 
-//字符串转buffer数组测试
+//字符串转buffer数组
 export function transData(data){
     const str = JSON.stringify(data)
     const buf = Buffer.from(str)

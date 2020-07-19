@@ -2,35 +2,35 @@ import store from '../store/index'
 
 
 var AWS = require("aws-sdk");
+//更新AWS配置
 AWS.config.update({
 
 	accessKeyId:'d18f4b611f2f71296e532eb30521c67e',
 	secretAccessKey:'c285c6d63b13c0843e8d337e0c591177',
 	s3ForcePathStyle: true,
 	signatureVersion:'v4',
-	region:'us-east-1'
+	region:'us-east-1',
 
 });
 // 连接亚马逊s3
 //const ep = new AWS.Endpoint('https://s3.amazonaws.com');
 // 连接ECOS服务器
-
 let ep = new AWS.Endpoint(store.state.interfaceIp);
 let s3 = new AWS.S3({endpoint: ep});
 let iam = new AWS.IAM({endpoint: ep});
-
+//设置AWS服务IP地址
 export function InitAWS(ip){
 	s3.endpoint = ip;
 	iam.endpoint = ip;
 }
-
+//配置s3的AccessKey
 export function ConfigKey(AccessKeyId,SecretAccessKey){
 	s3.config.update({
 		accessKeyId:AccessKeyId,
 		secretAccessKey:SecretAccessKey
 	})
 }
-
+//从iam服务创建用户
 export async function createUser(name){
 	const params = {
 		UserName:name,
@@ -44,7 +44,7 @@ export async function createUser(name){
 		return 0;
 	}
 }
-
+//通过用户名创建AccessKey
 export async function createKey(name){
 	const params = {
 		UserName:name,
@@ -179,7 +179,7 @@ export async function getUploadID(bucket, key, acl){
 		return 0;
 	}
 }
-
+//上传文件分片
 export async function uploadPart(body, bucket, key, partnumber, uploadID){
 	const params = {
 		Body: body,
@@ -206,7 +206,7 @@ export async function uploadPart(body, bucket, key, partnumber, uploadID){
 		return 0;
 	}
 }
-
+//获取已上传的分片
 export async function uploadedParts(bucket, key, uploadID){
 	const params = {
 		Bucket: bucket,
@@ -222,7 +222,7 @@ export async function uploadedParts(bucket, key, uploadID){
 		return 0;
 	}
 }
-
+//取消分片上传
 export async function abortUpload(bucket, key, uploadID){
 	const params = {
 		Bucket: bucket,
@@ -238,7 +238,7 @@ export async function abortUpload(bucket, key, uploadID){
 		return 0;
 	}
 }
-
+//完成分片上传
 export async function completeUpload(bucket, key, uploadID, parts){
 	const params = {
 		Bucket: bucket,
@@ -272,7 +272,7 @@ export async function deleteObject(bucket, key){
 		return e;
 	}
 }
-
+//列出桶内未完成的分片上传任务
 export async function listMultipartUploads(bucket){
 	const params = {
 		Bucket: bucket + '/',

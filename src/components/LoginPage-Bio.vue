@@ -1,12 +1,15 @@
 <template>
   <div id="app">
+    <!-- 标题栏 -->
     <div class="title">
       <div style="display:inline-block"><span>ECOS | 拟态对象存储</span></div>
       <el-button type="info" id="config" icon="el-icon-s-tools" @click="configVisible = true">修改配置</el-button>
     </div>
+    <!-- 分割线 -->
     <el-divider ></el-divider>
-
+    <!-- 主体 -->
     <el-main id="body">
+      <!-- 用户登录卡片 -->
       <div class="card">
         <el-card class="logincard">
           <div style="font-size:20px">用户登录</div>
@@ -33,13 +36,14 @@
         </el-card>
       </div>
     </el-main>
-
+    <!-- 页脚 -->
     <div id="footer">
       <el-container>
         <el-footer>北京大学•深圳研究生院</el-footer>
       </el-container>
     </div>
 
+    <!-- 用户注册对话框 -->
     <el-dialog title="用户注册" width="600px" :visible.sync="registerFormVisible">
       <div style="height:460px">
         <el-steps :active="1" align-center>
@@ -75,7 +79,7 @@
         <!-- <el-button type="primary" @click="handleCompleteReg">提交并进行身份信息采集</el-button> -->
       </div>
     </el-dialog>
-
+    <!-- 注册身份信息采集对话框 -->
     <el-dialog title="身份信息采集" width="600px" :visible.sync="registerForm2Visible" append-to-body>
       <div style="height:540px">
         <el-steps :active="2" align-center>
@@ -92,7 +96,7 @@
         </div>
       </div>
     </el-dialog>
-
+    <!-- 登录身份信息采集对话框 -->
     <el-dialog title="身份信息验证" width="600px" :visible.sync="loginFormVisible" append-to-body>
       <div style="height:540px">
         <el-steps :active="2" align-center>
@@ -109,7 +113,7 @@
         </div>
       </div>
     </el-dialog>
-
+    <!-- 修改配置信息对话框 -->
     <el-dialog title="修改配置信息" width="600px" :visible.sync="configVisible" append-to-body style="padding-top:130px">
       <el-form :model="configForm" status-icon ref="configForm">
         <el-form-item label="CM IP" prop="cmIp">
@@ -130,6 +134,7 @@
 </template>
 
 <script>
+//带身份认证的登录页面
 
 import router from 'vue-router'
 import store from '../store'
@@ -138,6 +143,7 @@ import {createUser, InitAWS} from '../api/s3api'
 
 export default {
   data() {
+    //检查用户名是否符合规范
     var isUsernameChecked = false;
     var checkUsername = (rule, value, callback) => {
       if (!value) {
@@ -157,6 +163,7 @@ export default {
         }
       }, 500);
     };
+    //检查密码是否符合规范
     var isPassChecked = false;
     var validatePass = (rule, value, callback) => {
       if (value === "") {
@@ -173,6 +180,7 @@ export default {
         callback();
       }
     };
+    //检查再次输入密码是否符合规范
     var isPassChecked2 = false;
     var validatePass2 = (rule, value, callback) => {
       if (value === "") {
@@ -186,6 +194,7 @@ export default {
         callback();
       }
     };
+    //检查邮箱是否符合规范
     var isEmailChecked = false;
     var checkEmail = (rule, value, callback) => {
       if (!value) {
@@ -208,6 +217,7 @@ export default {
     };
 
     return {
+      //注册表格
       regForm: {
         type:1,
         username: "",
@@ -215,16 +225,18 @@ export default {
         checkPass: "",
         email: ""
       },
+      //登录表格
       loginForm: {
         type:2,
         username: "",
         pass: ""
       },
+      //修改服务器IP
       configForm: {
         cmIp:"",
         interfaceIp:""
       },
-      
+      //验证规则
       rules: {
         username: [{ validator: checkUsername, trigger: "blur" }],
         pass: [{ validator: validatePass, trigger: "blur" }],
@@ -232,20 +244,25 @@ export default {
         email: [{ validator: checkEmail, trigger: "blur" }]
       },
 
+      //visible表示组件是否显示
       aesKey:'',
       loginFormVisible: false,
       registerFormVisible: false,
       registerForm2Visible: false,
       configVisible: false,
+      //是否勾选服务协议
       agreed1: false,
       agreed2: false,
+      //用于绘制二维码
       painting:{},
+      //轮询标志
       regPoll: false,
       logPoll: false,
     };
   },
 
   mounted(){
+    //获取cookie
     function getCookie(cname){
       var name = cname + "=";
       var ca = document.cookie.split(';');
@@ -257,6 +274,7 @@ export default {
     }
     var cmIp = "cmIp";
     var interfaceIp = "interfaceIp";
+    //若cookie中保存了服务器IP，则将cookie中保存的IP写入vuex中
     if(getCookie(cmIp) != ""){
       this.$store.dispatch('changecmIp', getCookie(cmIp));
       console.log(this.$store.state.cmIp);
@@ -271,6 +289,7 @@ export default {
 
     //登录流程
     handleLogin() {
+      //检查表中各项是否符合规范
       if (this.isUsernameChecked && this.isPassChecked && this.agreed1) {
         //获取aesKey
         //获取aesKey的请求格式
@@ -279,16 +298,18 @@ export default {
           username:''
         };
         getkeyReq.username = this.$data.loginForm.username;
+        // 请求需要转换成buffer数组再发送
         var logReq1 = transData(getkeyReq);
-        //aesEncrypt();
         //发送获取aesKey请求
         this.$axios({
           method:'post',
           url:store.state.cmIp,
           data:logReq1
         })
+        // 获取到响应后的处理
         .then((response) =>{
           console.log("response: ", response);
+          // 1表示服务器返回errorMessage
           if(response.data.state == "1"){
             this.$message({
               showClose:true,
@@ -304,6 +325,7 @@ export default {
             this.$data.aesKey = rsaDecrypt(str)
           }         
         })
+        // 发生错误时的处理
         .catch((error) =>{
           this.$message({
             showClose:true,
@@ -314,6 +336,7 @@ export default {
         })
         //发送登录请求
         .then(()=>{
+          //请求的格式
           var webContent = {
             type:115,
             username:this.$data.loginForm.username,
@@ -333,6 +356,7 @@ export default {
             url:store.state.cmIp,
             data:logReq2
           })
+          //收到响应的处理
           .then((response) =>{
             console.log("response",response);
             //收到CM对登录请求的响应
@@ -368,6 +392,7 @@ export default {
                 Flag:1
               };
               qrcontent.Username = this.$data.loginForm.username;
+              // 从vuex中获取ip地址数字部分
               var ipstr = store.state.cmIp.slice(7);
               var iparr = ipstr.split(":");
               qrcontent.CMip = iparr[0];
@@ -429,11 +454,13 @@ export default {
 
       }
     },
-    //用于测试点击直接跳转控制台
+    //用于测试，登录后直接跳转控制台，不经过身份验证
     async handleLogin1(){
       this.loginFormVisible = false;
       InitAWS(this.$store.state.interfaceIp);
+      //修改vuex中的用户名
       this.$store.dispatch('loginAct',this.loginForm.username);
+      //路由跳转到控制台
       this.$router.replace({path:'/Console/'+this.$store.state.username});      
     },
     //轮询登录信息
@@ -448,6 +475,7 @@ export default {
           console.log("轮询结果",response.data);
           if(response.data.state == "0"){
             console.log("confirm",response);
+            //CM返回登录轮询结果
             this.handleCompleteLogin(this.$data.loginForm.username)
           }else if(response.data.state == "1"){
             this.returnLog();
@@ -459,7 +487,7 @@ export default {
             })
           }                 
         })
-        //未收到确认信息则递归重新请求
+        //未收到确认信息则间隔5秒递归重新请求
         .catch((error)=>{
           console.log("error",error);
           if(this.logPoll == true){
@@ -481,14 +509,16 @@ export default {
     //完成登录
     handleCompleteLogin(data) {
       this.loginFormVisible = false;
+      //修改vuex中的登录状态
       this.$store.dispatch('loginAct',data);
       console.log(this.$route);
+      //路由跳转
       this.$router.replace({path:'/Console/'+this.$store.state.username});
       console.log(this.$route);      
     },
     //注册流程
     handleRegUserInfo() {
-      if (
+      if (          //检查表中各项格式是否符合规范
         this.isUsernameChecked &&
         this.isPassChecked &&
         this.isPassChecked2 &&
@@ -510,6 +540,7 @@ export default {
           url:store.state.cmIp,
           data:regReq1
         })
+        //收到响应后的处理
         .then((response) =>{
           console.log("response: ", response);
           if(response.data.state == "1"){
@@ -524,11 +555,10 @@ export default {
             var str = "";
             str = response.data.cmKey;
             console.log("str", str);         
-
             this.$data.aesKey = rsaDecrypt(str)            
           }
-
         })
+        //捕获错误信息
         .catch((error) =>{ 
           console.log(error);   
           this.$message({
@@ -614,6 +644,7 @@ export default {
               this.$data.painting.views[0].content = JSON.stringify(qrcontent);
               console.log(this.$data.painting.views[0].content);
               console.log("轮询");
+              //轮询标志置为true
               this.regPoll = true;
               var confirm = {
                 type:114,
@@ -684,6 +715,7 @@ export default {
     async handleCompleteReg() {
       this.registerFormVisible = false;
       this.registerForm2Visible = false;
+      //向interface server注册用户
       InitAWS(this.$store.state.interfaceIp);
       var data = await createUser(this.regForm.username);
       if(data != 0){
@@ -706,6 +738,7 @@ export default {
     },
     //修改配置
     changeConfig() {
+      //设置cookie内容
       function setCookie(name,value){ 
         var Days = 30; 
         var exp = new Date(); 
@@ -714,20 +747,17 @@ export default {
         console.log(name,value); 
       }; 
       if(this.configForm.cmIp != ""){
-        //this.$store.dispatch('changecmIp',this.configForm.cmIp);
         this.$store.commit('changecm',this.configForm.cmIp);
         console.log(this.$store.state.cmIp);
         document.cookie="cmIp="+this.configForm.cmIp;
       };
       if(this.configForm.interfaceIp != ""){
-        //this.$store.dispatch('changeinterfaceIp',this.configForm.interfaceIp);
         this.$store.commit('changeinterface',this.configForm.interfaceIp);
         console.log(this.$store.state.interfaceIp);
         document.cookie="interfaceIp="+this.configForm.interfaceIp;
       }
       this.configVisible = false;
     }
-
   }
 };
 </script>

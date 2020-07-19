@@ -17,23 +17,25 @@ Vue.use(VueRouter)
 Vue.prototype.$axios = axios
 Vue.prototype.$jsEncrypt = JsEncrypt
 
-
+//新建VueRouter实例
 const router = new VueRouter({
   mode:'history',
   routes:routers
 })
-// router.beforeEach((to, from, next) =>{
-//   if(to.path === '/LoginPage'){
-//     next();
-//   }else{
-//     if(to.meta.requireAuth && !store.state.isLogged){
-//       next({path:'/LoginPage'})      
-//     }else{
-//       next()
-//     }
-//   }
-// })
+//路由跳转前的验证
+router.beforeEach((to, from, next) =>{
+  if(to.path === '/LoginPage'){
+    next();
+  }else{
+    if(to.meta.requireAuth && !store.state.isLogged){
+      next({path:'/LoginPage'})      
+    }else{
+      next()
+    }
+  }
+})
 
+//将vue实例挂载到app上
 new Vue({
   el: '#app',
   router,

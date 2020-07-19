@@ -1,3 +1,4 @@
+//Vuex用于存放全局变量
 import Vue from 'vue'
 import Vuex from 'vuex'
 
@@ -6,6 +7,7 @@ Vue.use(Vuex)
 
 //创建Vuex对象
 const store = new Vuex.Store({
+    //用户名、CM服务器IP地址、interface serverIP地址、登录标识
     state:{
         username:'',
         cmIp:'http://219.223.193.21:10286',
